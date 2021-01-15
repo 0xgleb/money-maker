@@ -1,0 +1,68 @@
+name:                eventer
+version:             0.1.0.0
+license:             BSD3
+
+# extra-source-files:
+# - README.org
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+dependencies:
+- base
+
+library:
+  source-dirs: src
+
+default-extensions:
+- ConstraintKinds
+- DataKinds
+- DeriveAnyClass
+- DeriveGeneric
+- DerivingStrategies
+- DerivingVia
+- DuplicateRecordFields
+- FlexibleContexts
+- FlexibleInstances
+- GeneralizedNewtypeDeriving
+- KindSignatures
+- LambdaCase
+- MultiParamTypeClasses
+- NamedFieldPuns
+- NoImplicitPrelude
+- OverloadedStrings
+- QuasiQuotes
+- RecordWildCards
+- ScopedTypeVariables
+- StandaloneDeriving
+- TupleSections
+- TypeApplications
+- TypeOperators
+
+ghc-options:
+- -freverse-errors
+- -Wall
+- -Werror
+- -Wimplicit-prelude
+- -Wincomplete-record-updates
+- -Wmissing-home-modules
+- -Wnoncanonical-monad-instances
+- -Wnoncanonical-monoid-instances
+- -Wpartial-fields
+- -Wsemigroup
+
+tests:
+  eventer-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - eventer
+    - hspec
+    - QuickCheck
+    # - generic-random
+    # - quickcheck-text
