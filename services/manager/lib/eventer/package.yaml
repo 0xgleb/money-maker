@@ -11,38 +11,57 @@ license:             BSD3
 
 dependencies:
 - base
+- aeson
+- protolude
+- template-haskell
+- uuid
 
 library:
   source-dirs: src
 
 default-extensions:
+- BangPatterns
+- BlockArguments
 - ConstraintKinds
-- DataKinds
-- DeriveAnyClass
+- DefaultSignatures
+- DeriveDataTypeable
 - DeriveGeneric
-- DerivingStrategies
-- DerivingVia
+- DeriveLift
+- DeriveTraversable  # Implies: DeriveFoldable, DeriveFunctor
+- DerivingVia  # Implies: DerivingStrategies
 - DuplicateRecordFields
+- EmptyCase
 - FlexibleContexts
-- FlexibleInstances
+- FlexibleInstances  # Implies: TypeSynonymInstances
+- FunctionalDependencies  # Implies: MultiParamTypeClasses
+- GADTs  # Implies: GADTSyntax, MonoLocalBinds
 - GeneralizedNewtypeDeriving
-- KindSignatures
+- InstanceSigs
 - LambdaCase
-- MultiParamTypeClasses
+- MagicHash
+- MultiParamTypeClasses  # Implies: ConstrainedClassMethods
 - NamedFieldPuns
 - NoImplicitPrelude
+- NoMonomorphismRestriction
+- NoStarIsType
+- NumericUnderscores
 - OverloadedStrings
+- PatternSynonyms
 - QuasiQuotes
-- RecordWildCards
-- ScopedTypeVariables
+- RankNTypes  # Implies: ExplicitForAll
+- RecordWildCards  # Implies: DisambiguateRecordFields
+- ScopedTypeVariables  # Implies: ExplicitForAll
 - StandaloneDeriving
 - TupleSections
 - TypeApplications
-- TypeOperators
+- TypeFamilyDependencies  # Implies: TypeFamilies
+- TypeInType  # Implies: DataKinds, KindSignatures, PolyKinds
+- TypeOperators  # Implies: ExplicitNamespaces
+- ViewPatterns
 
 ghc-options:
-- -freverse-errors
-- -Wall
+- -freverse-errors # reverses the order of errors
+- -Wall # all the next options turn on warnings and turn them into errors
 - -Werror
 - -Wimplicit-prelude
 - -Wincomplete-record-updates
@@ -51,6 +70,7 @@ ghc-options:
 - -Wnoncanonical-monoid-instances
 - -Wpartial-fields
 - -Wsemigroup
+- -Wno-unticked-promoted-constructors # don't complain about unticked type-level promoted constructors
 
 tests:
   eventer-test:
