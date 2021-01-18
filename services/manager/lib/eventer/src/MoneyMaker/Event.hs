@@ -1,6 +1,6 @@
 module MoneyMaker.Event
   ( Event(..)
-  , AggregationError(..)
+  , NoEventsFoundError(..)
   , computeCurrentState
   , Id(..)
   )
@@ -33,22 +33,22 @@ class (Aeson.ToJSON event, Aeson.FromJSON event) => Event event where
     -> event
     -> m errors (EventAggregate event)
 
-data AggregationError
-  = NoEventsFound
+data NoEventsFoundError
+  = NoEventsFoundError
   deriving stock (Eq, Show)
 
 computeCurrentState
   :: forall event errors m
    . ( Event event
      , MonadUltraError m
-     , AggregationError `Elem` errors
+     , NoEventsFoundError `Elem` errors
      , EventError event `Elem` errors
      )
   => [event]
   -> m errors (EventAggregate event)
 computeCurrentState = \case
   [] ->
-    throwUltraError NoEventsFound
+    throwUltraError NoEventsFoundError
 
   (event:events) -> do
     initialState <- applyEvent Nothing event

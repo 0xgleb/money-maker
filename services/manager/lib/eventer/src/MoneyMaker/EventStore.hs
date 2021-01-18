@@ -2,14 +2,16 @@
 
 module MoneyMaker.EventStore
   ( getAggregate
+  , applyCommand
   , MonadEventStore(..)
-  , EventStoreError(..)
+  , CouldntDecodeEventError(..)
 
   , StorableEvent(..)
   , InMemoryEventStore(..)
   )
   where
 
+import MoneyMaker.Command
 import MoneyMaker.Event
 import MoneyMaker.Error
 
@@ -24,36 +26,55 @@ getAggregate
    . ( Event event
      , MonadEventStore m
      , MonadUltraError m
-     , AggregationError `Elem` errors
+     , NoEventsFoundError `Elem` errors
      , EventError event `Elem` errors
-     , EventStoreError  `Elem` errors
+     , CouldntDecodeEventError  `Elem` errors
      )
   => Id (AggregateIdTag event)
   -> m errors (EventAggregate event)
 getAggregate = getAggregateWithProxy $ Proxy @event
 
+applyCommand
+  :: forall event errors command m
+   . ( Command command event
+     , MonadEventStore m
+     , EventError event `Elem` errors
+     , CouldntDecodeEventError `Elem` errors
+     , CommandError command `Elem` errors
+     , EventError event `Elem` errors
+     , Event event
+     )
+  => Id (AggregateIdTag event)
+  -> command
+  -> m errors (EventAggregate event)
+applyCommand = applyCommandWithProxy $ Proxy @event
 
-data EventStoreError
-  = CouldntDecodeEvent Prelude.String
+data CouldntDecodeEventError
+  = CouldntDecodeEventError Prelude.String
 
-class (MonadUltraError m)
-  => MonadEventStore (m :: [Type] -> Type -> Type)
-  where
-    getAggregateWithProxy
-      :: ( AggregationError `Elem` errors
-         , EventError event `Elem` errors
-         , EventStoreError  `Elem` errors
-         , Event event
-         )
-      => Proxy event
-      -> Id (AggregateIdTag event)
-      -> m errors (EventAggregate event)
+class MonadUltraError m => MonadEventStore (m :: [Type] -> Type -> Type) where
+  getAggregateWithProxy
+    :: ( NoEventsFoundError `Elem` errors
+        , EventError event `Elem` errors
+        , CouldntDecodeEventError `Elem` errors
+        , Event event
+        )
+    => Proxy event
+    -> Id (AggregateIdTag event)
+    -> m errors (EventAggregate event)
 
-  -- command
-  --   :: Command command event
-  --   => Id (AggregateIdTag event)
-  --   -> command
-  --   -> m (Either (AggregationError (Event)))
+  applyCommandWithProxy
+    :: ( Command command event
+       , EventError event `Elem` errors
+       , CouldntDecodeEventError `Elem` errors
+       , CommandError command `Elem` errors
+       , EventError event `Elem` errors
+       , Event event
+       )
+    => Proxy event
+    -> Id (AggregateIdTag event)
+    -> command
+    -> m errors (EventAggregate event)
 
 data StorableEvent
   = StorableEvent
@@ -72,39 +93,63 @@ instance MonadUltraError InMemoryEventStore where
   throwUltraError error
     = InMemoryEventStore $ lift $ throwUltraError error
 
-  catchUltraError (InMemoryEventStore action) handleError = do
-    store <- get
-    let UltraEither result = runStateT action store
+  catchUltraErrorMethod (InMemoryEventStore action) handleError = do
+    UltraEither result <- runStateT action <$> get
     case result of
       Right (val, _) ->
         InMemoryEventStore $ pure val
 
       Left err ->
         case getOneOf err of
-          Right error   -> handleError error
-          Left otherErr -> InMemoryEventStore $ lift $ UltraEither $ Left otherErr
+          Right error -> handleError error
+          Left otherErr ->
+            InMemoryEventStore $ lift $ UltraEither $ Left otherErr
 
 
 instance MonadEventStore InMemoryEventStore where
-  getAggregateWithProxy
-    :: ( AggregationError `Elem` errors
-       , EventError event `Elem` errors
-       , EventStoreError  `Elem` errors
-       , Event event
-       )
-    => Proxy event
-    -> Id (AggregateIdTag event)
-    -> InMemoryEventStore errors (EventAggregate event)
+  getAggregateWithProxy = getAggregateWithProxyInMemory
+  applyCommandWithProxy = applyCommandWithProxyInMemory
 
-  getAggregateWithProxy (Proxy :: Proxy event) (Id uuid) = do
-    allEvents <- get
+getAggregateWithProxyInMemory
+  :: ( NoEventsFoundError `Elem` errors
+      , EventError event `Elem` errors
+      , CouldntDecodeEventError  `Elem` errors
+      , Event event
+      )
+  => Proxy event
+  -> Id (AggregateIdTag event)
+  -> InMemoryEventStore errors (EventAggregate event)
 
-    let relevantEvents
-          = sequence
-          $ Aeson.fromJSON . payload
-              <$> filter ((== uuid) . id) allEvents
+getAggregateWithProxyInMemory (_ :: Proxy event) (Id uuid) = do
+  allEvents <- get
 
-    case relevantEvents of
-      Aeson.Error err -> throwUltraError $ CouldntDecodeEvent err
-      Aeson.Success events -> do
-        computeCurrentState @event events
+  let relevantEvents
+        = sequence
+        $ Aeson.fromJSON . payload
+            <$> filter ((== uuid) . id) allEvents
+
+  case relevantEvents of
+    Aeson.Error err -> throwUltraError $ CouldntDecodeEventError err
+    Aeson.Success events -> do
+      computeCurrentState @event events
+
+applyCommandWithProxyInMemory
+  :: forall command event errors
+   . ( Command command event
+     , CouldntDecodeEventError `Elem` errors
+     , CommandError command `Elem` errors
+     , EventError event `Elem` errors
+     , Event event
+     )
+  => Proxy event
+  -> Id (AggregateIdTag event)
+  -> command
+  -> InMemoryEventStore errors (EventAggregate event)
+
+applyCommandWithProxyInMemory (eventProxy :: Proxy event) id command = do
+  aggregate <-
+    catchUltraError @NoEventsFoundError
+      (Just <$> getAggregateWithProxyInMemory eventProxy id)
+      (const $ pure Nothing)
+
+  handleCommand aggregate command

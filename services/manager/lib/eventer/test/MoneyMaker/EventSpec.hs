@@ -22,7 +22,7 @@ spec :: Spec
 spec = do
   describe "computeCurrentState" $ do
     it "correctly computes example user events" $ do
-      getUltraEither (computeCurrentState @_ @[AggregationError, UserEventError] exampleUserEvents)
+      getUltraEither (computeCurrentState @_ @[NoEventsFoundError, UserEventError] exampleUserEvents)
         `shouldBe` (Right exampleUser)
 
 data UserEvent

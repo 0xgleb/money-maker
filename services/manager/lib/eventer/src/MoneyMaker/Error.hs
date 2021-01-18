@@ -1,7 +1,10 @@
+{-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
 module MoneyMaker.Error
   ( MonadUltraError(..)
+  , catchUltraError
   , Elem
   , OneOf(..)
   , getOneOf
@@ -21,34 +24,18 @@ class
       => error
       -> m errors a
 
-    catchUltraError
-      :: ( error `Elem` errors
-         , GetOneOf error errors
-         )
-      => m errors a
-      -> (error -> m (errors `Without` error) a)
-      -> m (errors `Without` error) a
+    catchUltraErrorMethod
+      :: m (error:errors) a
+      -> (error -> m errors a)
+      -> m errors a
 
-
-
-type Elem (x :: Type) (xs :: [Type])
-  = ( (x `BoolElem` xs) ~ True
-    , InjectOneOf x xs
-    )
-
-type family BoolElem (x :: k) (xs :: [k]) :: Bool where
-  -- need the tick in front of [] so that Haskell can
-  -- distinguish between list type and empty type-level list
-  x `BoolElem` '[]      = False
-  x `BoolElem` (x : xs) = True
-  x `BoolElem` (_ : xs) = x `BoolElem` xs
-
-type family Without (xs :: [k]) (x :: k) :: [k] where
-  '[]      `Without` x = '[]
-  (x : xs) `Without` x = xs `Without` x
-  (y : xs) `Without` x = y : (xs `Without` x)
-
-
+catchUltraError
+  :: forall error errors m a
+   . MonadUltraError m
+  => m (error:errors) a
+  -> (error -> m errors a)
+  -> m errors a
+catchUltraError = catchUltraErrorMethod
 
 data OneOf (xs :: [Type]) where
   ThisOne :: x -> OneOf (x : xs)
@@ -60,41 +47,29 @@ instance Prelude.Show (OneOf xs) where
 instance Prelude.Eq (OneOf xs) where
   _ == _ = Prelude.error "implement Eq OneOf"
 
-class GetOneOf (x :: Type) (xs :: [Type]) where
+class GetOneOf (x :: Type) (xsWith :: [Type]) (xsWithout :: [Type]) | x xsWith -> xsWithout where
   getOneOf
-    :: x `Elem` xs
-    => OneOf xs
-    -> Either (OneOf (xs `Without` x)) x
+    :: OneOf xsWith
+    -> Either (OneOf xsWithout) x
 
-instance (xs `Without` x) ~ xs => GetOneOf x (x:xs) where
+instance GetOneOf x (x:xs) xs where
   getOneOf = \case
     ThisOne x   -> Right x
     Other other -> Left other
 
-instance {-# INCOHERENT #-}
-  ( x `Elem` xs
-  , GetOneOf x xs
-  , (y : (xs `Without` x)) ~ ((y:xs) `Without` x)
-  ) => GetOneOf x (y:xs)
-  where
-    getOneOf = \case
-      ThisOne x   -> Left (ThisOne x :: OneOf (y:(xs `Without` x)))
-      Other other -> first Other $ getOneOf other
+instance {-# INCOHERENT #-} GetOneOf x xsWith xsWithout => GetOneOf x (y:xsWith) (y:xsWithout) where
+  getOneOf = \case
+    ThisOne x   -> Left (ThisOne x)
+    Other other -> first Other $ getOneOf other
 
--- class (x `BoolElem` xs) ~ True => InjectOneOf (x :: Type) (xs :: [Type]) where
-class InjectOneOf (x :: Type) (xs :: [Type]) where
-  injectOneOf :: x -> OneOf xs
+class Elem (x :: Type) (xs :: [Type]) where
+  mkOneOf :: x -> OneOf xs
 
-instance InjectOneOf x (x : xs) where
-  injectOneOf = ThisOne
+instance Elem x (x : xs) where
+  mkOneOf = ThisOne
 
-instance {-# INCOHERENT #-}
-  ( (x `BoolElem` xs) ~ True
-  , InjectOneOf x xs
-  )
-  => InjectOneOf x (y : xs)
-  where
-    injectOneOf = Other . injectOneOf
+instance {-# INCOHERENT #-} Elem x xs => Elem x (y : xs) where
+  mkOneOf = Other . mkOneOf
 
 newtype UltraEither (errors :: [Type]) (a :: Type)
   = UltraEither { getUltraEither :: Either (OneOf errors) a }
@@ -102,12 +77,12 @@ newtype UltraEither (errors :: [Type]) (a :: Type)
 
 instance MonadUltraError UltraEither where
   throwUltraError error
-    = UltraEither $ Left $ injectOneOf error
+    = UltraEither $ Left $ mkOneOf error
 
-  catchUltraError (UltraEither (Right val)) _
+  catchUltraErrorMethod (UltraEither (Right val)) _
     = UltraEither $ Right val
 
-  catchUltraError (UltraEither (Left error)) handleError
+  catchUltraErrorMethod (UltraEither (Left error)) handleError
     = case getOneOf error of
         Left err  -> UltraEither $ Left err
         Right err -> handleError err

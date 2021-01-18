@@ -19,7 +19,7 @@ spec = do
       let result
             = fmap fst $ getUltraEither
             $ flip runStateT exampleStorableEvents $ runInMemoryEventStore
-            $ getAggregate @UserEvent @[AggregationError, UserEventError, EventStoreError]
+            $ getAggregate @UserEvent @[NoEventsFoundError, UserEventError, CouldntDecodeEventError]
             $ Id [uuid|123e4666-e89b-12d3-a456-666614174000|]
       result `shouldBe` (Right exampleUser)
 
