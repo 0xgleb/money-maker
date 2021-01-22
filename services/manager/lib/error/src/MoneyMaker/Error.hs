@@ -29,6 +29,7 @@ class
       -> (error -> m errors a)
       -> m errors a
 
+-- separate function with explicit forall for easy type applications
 catchUltraError
   :: forall error errors m a
    . MonadUltraError m

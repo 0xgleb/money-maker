@@ -1,4 +1,4 @@
-name:                money-maker-eventer
+name:                money-maker-exchange-overlord-impl
 version:             0.1.0.0
 license:             BSD3
 
@@ -6,9 +6,11 @@ dependencies:
 - base
 - aeson
 - protolude
-- template-haskell
-- uuid
+- servant
+- servant-client
+- http-client
 - money-maker-error
+- money-maker-exchange-overlord-ifc
 
 library:
   source-dirs: src
@@ -65,18 +67,3 @@ ghc-options:
 - -Wpartial-fields
 - -Wsemigroup
 - -Wno-unticked-promoted-constructors # don't complain about unticked type-level promoted constructors
-
-tests:
-  money-maker-eventer-test:
-    main:                Spec.hs
-    source-dirs:         test
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - money-maker-eventer
-    - hspec
-    - QuickCheck
-    # - generic-random
-    # - quickcheck-text

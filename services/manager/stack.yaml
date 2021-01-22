@@ -30,7 +30,10 @@ resolver: lts-16.29
 #   - wai
 packages:
 - ./exe
+- ./lib/error
 - ./lib/eventer
+- ./lib/exchange-overlord/ifc
+- ./lib/exchange-overlord/impl
 
 # Dependency packages to be pulled from upstream that are not in the resolver.
 # These entries can reference officially published versions as well as

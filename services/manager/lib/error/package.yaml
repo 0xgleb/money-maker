@@ -1,14 +1,10 @@
-name:                money-maker-eventer
+name:                money-maker-error
 version:             0.1.0.0
 license:             BSD3
 
 dependencies:
 - base
-- aeson
 - protolude
-- template-haskell
-- uuid
-- money-maker-error
 
 library:
   source-dirs: src
@@ -66,17 +62,17 @@ ghc-options:
 - -Wsemigroup
 - -Wno-unticked-promoted-constructors # don't complain about unticked type-level promoted constructors
 
-tests:
-  money-maker-eventer-test:
-    main:                Spec.hs
-    source-dirs:         test
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - money-maker-eventer
-    - hspec
-    - QuickCheck
-    # - generic-random
-    # - quickcheck-text
+# tests:
+#   eventer-test:
+#     main:                Spec.hs
+#     source-dirs:         test
+#     ghc-options:
+#     - -threaded
+#     - -rtsopts
+#     - -with-rtsopts=-N
+#     dependencies:
+#     - eventer
+#     - hspec
+#     - QuickCheck
+#     # - generic-random
+#     # - quickcheck-text

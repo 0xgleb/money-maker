@@ -146,7 +146,7 @@ applyCommandWithProxyInMemory
   -> command
   -> InMemoryEventStore errors (EventAggregate event)
 
-applyCommandWithProxyInMemory (eventProxy :: Proxy event) id command = do
+applyCommandWithProxyInMemory eventProxy id command = do
   aggregate <-
     catchUltraError @NoEventsFoundError
       (Just <$> getAggregateWithProxyInMemory eventProxy id)
