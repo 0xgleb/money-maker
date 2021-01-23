@@ -4,6 +4,7 @@ license:             BSD3
 
 dependencies:
 - base
+- aeson
 - protolude
 - money-maker-error
 

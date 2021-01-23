@@ -16,15 +16,21 @@ import qualified MoneyMaker.ExchangeOverlord as EO
 -- external dependencies
 import Protolude
 
-newtype BinanceT m a
-  = BinanceT (m a)
+newtype BinanceT (m :: [Type] -> Type -> Type) (errors :: [Type]) (a :: Type)
+  = BinanceT (m errors a)
   deriving newtype (Functor, Applicative, Monad)
 
-instance EO.MonadExchangeOverlord (BinanceT m) where
-  getLatestBTCPrice = undefined
+deriving newtype instance E.MonadUltraError m => E.MonadUltraError (BinanceT m)
 
--- getLatestBinanceBTCPrice
---   :: E.MonadUltraError m
---   => m errors EO.BitcoinPrice
+instance E.MonadUltraError m => EO.MonadExchangeOverlord (BinanceT m) where
+  getLatestBTCPrice = BinanceT $ getLatestBinanceBTCPrice
 
--- getLatestBinanceBTCPrice = do
+getLatestBinanceBTCPrice
+  :: ( E.MonadUltraError m
+     , MonadIO (m errors)
+     )
+  => m errors EO.BitcoinPrice
+
+getLatestBinanceBTCPrice = do
+  TickerPrice{price = Price price} <- getBinanceTickerSymbol
+  pure $ EO.BitcoinPrice price
