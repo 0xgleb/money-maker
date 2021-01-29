@@ -18,11 +18,6 @@ import           Protolude
 import           Servant.API
 import qualified Servant.Client      as Client
 
-
-getBinanceTickerSymbol :: m TickerPrice
-getBinanceTickerSymbol
-  = Client.clientIn $ Proxy @BinanceAPI
-
 customClient
   :: forall api errors m
    . ( Client.HasClient Client.ClientM api
