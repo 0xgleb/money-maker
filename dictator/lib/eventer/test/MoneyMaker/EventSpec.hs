@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE StrictData #-}
 
 module MoneyMaker.EventSpec
   ( spec

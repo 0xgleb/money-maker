@@ -64,8 +64,8 @@ type TickerAPI
 
 data TickerPrice
   = TickerPrice
-      { symbol :: TickerSymbol
-      , price  :: Price
+      { symbol :: !TickerSymbol
+      , price  :: !Price
       }
   deriving stock (Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)

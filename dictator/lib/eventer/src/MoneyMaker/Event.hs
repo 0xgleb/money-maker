@@ -55,5 +55,5 @@ computeCurrentState = \case
     foldM processNextEvent initialState events
 
   where
-    processNextEvent currentState event
+    processNextEvent !currentState !event
       = applyEvent (Just currentState) event
