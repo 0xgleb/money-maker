@@ -32,3 +32,7 @@ I think to consider this stage done, we want to have something running in produc
 ## Mission complete
 
 Consider this stage done when we have mansions lol.
+
+# Useful links
+- [Retrieving historical Binance data](https://medium.com/swlh/retrieving-full-historical-data-for-every-cryptocurrency-on-binance-bitmex-using-the-python-apis-27b47fd8137f)
+- [Binance Websocket API documentation](https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md#trade-streams)
