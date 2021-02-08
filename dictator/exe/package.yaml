@@ -6,29 +6,44 @@ maintainer:          "example@example.com"
 copyright:           "2020 Author name here"
 
 default-extensions:
+- BangPatterns
+- BlockArguments
 - ConstraintKinds
-- DataKinds
-- DeriveAnyClass
+- DefaultSignatures
+- DeriveDataTypeable
 - DeriveGeneric
-- DerivingStrategies
-- DerivingVia
+- DeriveLift
+- DeriveTraversable  # Implies: DeriveFoldable, DeriveFunctor
+- DerivingVia  # Implies: DerivingStrategies
 - DuplicateRecordFields
+- EmptyCase
 - FlexibleContexts
-- FlexibleInstances
+- FlexibleInstances  # Implies: TypeSynonymInstances
+- FunctionalDependencies  # Implies: MultiParamTypeClasses
+- GADTs  # Implies: GADTSyntax, MonoLocalBinds
 - GeneralizedNewtypeDeriving
-- KindSignatures
+- InstanceSigs
 - LambdaCase
-- MultiParamTypeClasses
+- MagicHash
+- MultiParamTypeClasses  # Implies: ConstrainedClassMethods
 - NamedFieldPuns
 - NoImplicitPrelude
+- NoMonomorphismRestriction
+- NoStarIsType
+- NumericUnderscores
 - OverloadedStrings
+- PatternSynonyms
 - QuasiQuotes
-- RecordWildCards
-- ScopedTypeVariables
+- RankNTypes  # Implies: ExplicitForAll
+- RecordWildCards  # Implies: DisambiguateRecordFields
+- ScopedTypeVariables  # Implies: ExplicitForAll
 - StandaloneDeriving
 - TupleSections
 - TypeApplications
-- TypeOperators
+- TypeFamilyDependencies  # Implies: TypeFamilies
+- TypeInType  # Implies: DataKinds, KindSignatures, PolyKinds
+- TypeOperators  # Implies: ExplicitNamespaces
+- ViewPatterns
 
 ghc-options:
 - -freverse-errors
@@ -53,3 +68,6 @@ executables:
     - -O2
     dependencies:
     - base
+    - process
+    - protolude
+    - stm
