@@ -57,8 +57,11 @@ ghc-options:
 - -Wpartial-fields
 - -Wsemigroup
 
+data-files:
+- soothsayer/example.py
+
 executables:
-  exe:
+  make-money:
     main:                Main.hs
     source-dirs:         src
     ghc-options:
@@ -70,4 +73,5 @@ executables:
     - base
     - process
     - protolude
+    - text
     - stm
