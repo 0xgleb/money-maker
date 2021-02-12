@@ -13,22 +13,22 @@ main = do
   IO.hSetBuffering IO.stdin IO.NoBuffering -- we only need this for testing with getLine
   IO.hSetBuffering IO.stdout IO.NoBuffering -- we only need this for testing with getLine
 
-  (priceDataChannel, predictionChannel) <- spawnChannelledPredictionProcess
+  (priceDataQueue, predictionQueue) <- spawnPredictionProcessAndBindToQueues
 
-  void $ forkIO $ forever $ getLivePriceData priceDataChannel
+  void $ forkIO $ forever $ getLivePriceData priceDataQueue
 
   void $ forever $ do
-    prediction <- STM.atomically $ STM.readTChan predictionChannel
+    prediction <- STM.atomically $ STM.readTQueue predictionQueue
     handlePrediction prediction
 
   where
     -- placeholder for the function that will get live price data from the
     -- Binance Websockets API, process it, and write relevant information
-    -- into the price data channel
-    getLivePriceData :: STM.TChan ContractualPriceData -> IO ()
-    getLivePriceData priceDataChannel = do
+    -- into the price data queue
+    getLivePriceData :: STM.TQueue ContractualPriceData -> IO ()
+    getLivePriceData priceDataQueue = do
       message <- getLine
-      STM.atomically $ STM.writeTChan priceDataChannel ContractualPriceData{..}
+      STM.atomically $ STM.writeTQueue priceDataQueue ContractualPriceData{..}
 
     -- placeholder for the function that will take a new prediction from the
     -- prediction process and evaluate whether it needs to make any changes
@@ -48,25 +48,25 @@ data ContractualPrediction
       { message :: LText
       }
 
-spawnChannelledPredictionProcess
-  :: IO (STM.TChan ContractualPriceData, STM.TChan ContractualPrediction)
-spawnChannelledPredictionProcess = do
-  priceDataChannel <- STM.newTChanIO
-  predictionsChannel <- STM.newTChanIO
+spawnPredictionProcessAndBindToQueues
+  :: IO (STM.TQueue ContractualPriceData, STM.TQueue ContractualPrediction)
+spawnPredictionProcessAndBindToQueues = do
+  priceDataQueue <- STM.newTQueueIO
+  predictionsQueue <- STM.newTQueueIO
 
   (inputHandle, outputHandle, processHandle) <- createProcess "example"
   -- TODO: try pinging the process before spawning everything else
 
   -- need a separate thread to run the infinite loop
   void $ forkIO $ do
-    infinitePriceChannelToInputLink priceDataChannel inputHandle
+    bindPriceDataQueueToProcessInput priceDataQueue inputHandle
     void $ Proc.terminateProcess processHandle
 
   -- need a separate thread to run the infinite loop
   void $ forkIO
-    $ infiniteOutputToPredictionsChannelLink outputHandle predictionsChannel
+    $ bindProcessOutputToPredictionsQueue outputHandle predictionsQueue
 
-  pure (priceDataChannel, predictionsChannel)
+  pure (priceDataQueue, predictionsQueue)
 
   where
     createProcess strategy = do
@@ -85,39 +85,39 @@ newtype InputHandle
   = InputHandle { unpackInputHandle :: Handle }
   deriving newtype (Show)
 
--- | This function reads from the channel whenever there is something in there
+-- | This function reads from the queue whenever there is something in there
 -- and writes the new data into the input handle of the predictions process.
--- The reason it only reads from the channel whenver there is something in there
+-- The reason it only reads from the queue whenver there is something in there
 -- and doesn't just continuously run in an infinite loop is the @atomically@
--- function, which blocks execution until there is something in the channel
-infinitePriceChannelToInputLink
-  :: STM.TChan ContractualPriceData
+-- function, which blocks execution until there is something in the queue
+bindPriceDataQueueToProcessInput
+  :: STM.TQueue ContractualPriceData
   -> InputHandle
   -> IO ()
-infinitePriceChannelToInputLink priceDataChannel inputHandle = do
-  ContractualPriceData{..} <- STM.atomically $ STM.readTChan priceDataChannel
+bindPriceDataQueueToProcessInput priceDataQueue inputHandle = do
+  ContractualPriceData{..} <- STM.atomically $ STM.readTQueue priceDataQueue
   let shouldStop = message == "stop"
   unless shouldStop $ do
     hPutStrLn @Text (unpackInputHandle inputHandle) message
-    infinitePriceChannelToInputLink priceDataChannel inputHandle
+    bindPriceDataQueueToProcessInput priceDataQueue inputHandle
 
 newtype OutputHandle
   = OutputHandle { unpackOutputHandle :: Handle }
   deriving newtype (Show)
 
 -- | This function reads from the prediction process output and writes new
--- predictions into the prediction channel whenever there is a new line with a
+-- predictions into the prediction queue whenever there is a new line with a
 -- prediction in the output
-infiniteOutputToPredictionsChannelLink
+bindProcessOutputToPredictionsQueue
   :: OutputHandle
-  -> STM.TChan ContractualPrediction
+  -> STM.TQueue ContractualPrediction
   -> IO ()
-infiniteOutputToPredictionsChannelLink
+bindProcessOutputToPredictionsQueue
   outputHandle@(OutputHandle unpackedOutputHandle)
-  predictionsChannel
+  predictionsQueue
   = do
   closed <- IO.hIsClosed unpackedOutputHandle
   unless closed $ do
     message <- Txt.LIO.hGetLine unpackedOutputHandle
-    STM.atomically $ STM.writeTChan predictionsChannel ContractualPrediction{..}
-    infiniteOutputToPredictionsChannelLink outputHandle predictionsChannel
+    STM.atomically $ STM.writeTQueue predictionsQueue ContractualPrediction{..}
+    bindProcessOutputToPredictionsQueue outputHandle predictionsQueue
