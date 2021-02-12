@@ -10,16 +10,17 @@ import qualified System.Process         as Proc
 
 main :: IO ()
 main = do
-  (priceDataChannel, predictionChannel, processHandle) <-
-    spawnChannelledPredictionProcess
+  IO.hSetBuffering IO.stdin IO.NoBuffering -- we only need this for testing with getLine
+  IO.hSetBuffering IO.stdout IO.NoBuffering -- we only need this for testing with getLine
 
-  void $ forkIO $ getLivePriceData priceDataChannel
+  (priceDataChannel, predictionChannel) <- spawnChannelledPredictionProcess
+
+  void $ forkIO $ forever $ getLivePriceData priceDataChannel
 
   void $ forever $ do
     prediction <- STM.atomically $ STM.readTChan predictionChannel
     handlePrediction prediction
 
-  void $ Proc.terminateProcess processHandle
   where
     -- placeholder for the function that will get live price data from the
     -- Binance Websockets API, process it, and write relevant information
@@ -48,37 +49,41 @@ data ContractualPrediction
       }
 
 spawnChannelledPredictionProcess
-  :: IO (STM.TChan ContractualPriceData, STM.TChan ContractualPrediction, Proc.ProcessHandle)
+  :: IO (STM.TChan ContractualPriceData, STM.TChan ContractualPrediction)
 spawnChannelledPredictionProcess = do
   priceDataChannel <- STM.newTChanIO
   predictionsChannel <- STM.newTChanIO
 
-  scriptPath <- Path.getDataFileName "../soothsayer/example.py"
-
-  (fmap InputHandle -> Just inputHandle
-    , fmap OutputHandle -> Just outputHandle
-    , _
-    , processHandle
-    ) <- Proc.createProcess $ processDescription scriptPath
-
-  IO.hSetBuffering (unpackInputHandle inputHandle) IO.NoBuffering
-  IO.hSetBuffering (unpackOutputHandle outputHandle) IO.NoBuffering
+  (inputHandle, outputHandle, processHandle) <- createProcess "example"
+  -- TODO: try pinging the process before spawning everything else
 
   -- need a separate thread to run the infinite loop
-  void $ forkIO $ infinitePriceChannelToInputLink priceDataChannel inputHandle
+  void $ forkIO $ do
+    infinitePriceChannelToInputLink priceDataChannel inputHandle
+    void $ Proc.terminateProcess processHandle
 
   -- need a separate thread to run the infinite loop
-  void $ forkIO $ infiniteOutputToPredictionsChannelLink outputHandle priceDataChannel predictionsChannel
+  void $ forkIO
+    $ infiniteOutputToPredictionsChannelLink outputHandle predictionsChannel
 
-  pure (priceDataChannel, predictionsChannel, processHandle)
+  pure (priceDataChannel, predictionsChannel)
 
   where
-    processDescription scriptPath
-      = (Proc.proc "/usr/bin/python" [scriptPath])
+    createProcess strategy = do
+      scriptPath <- Path.getDataFileName $ "../soothsayer/" <> strategy <> ".py"
+
+      (Just inputHandle, Just outputHandle, _, processHandle) <-
+        Proc.createProcess (Proc.proc "/usr/bin/python3" [scriptPath])
           { Proc.std_in = Proc.CreatePipe, Proc.std_out = Proc.CreatePipe }
+
+      IO.hSetBuffering inputHandle  IO.NoBuffering
+      IO.hSetBuffering outputHandle IO.NoBuffering
+
+      pure (InputHandle inputHandle, OutputHandle outputHandle, processHandle)
 
 newtype InputHandle
   = InputHandle { unpackInputHandle :: Handle }
+  deriving newtype (Show)
 
 -- | This function reads from the channel whenever there is something in there
 -- and writes the new data into the input handle of the predictions process.
@@ -98,24 +103,21 @@ infinitePriceChannelToInputLink priceDataChannel inputHandle = do
 
 newtype OutputHandle
   = OutputHandle { unpackOutputHandle :: Handle }
+  deriving newtype (Show)
 
 -- | This function reads from the prediction process output and writes new
 -- predictions into the prediction channel whenever there is a new line with a
 -- prediction in the output
 infiniteOutputToPredictionsChannelLink
   :: OutputHandle
-  -> STM.TChan ContractualPriceData
   -> STM.TChan ContractualPrediction
   -> IO ()
 infiniteOutputToPredictionsChannelLink
   outputHandle@(OutputHandle unpackedOutputHandle)
-  priceChannel
   predictionsChannel
   = do
-
   closed <- IO.hIsClosed unpackedOutputHandle
   unless closed $ do
-    -- message <- IO.hGetLine unpackedOutputHandle
     message <- Txt.LIO.hGetLine unpackedOutputHandle
     STM.atomically $ STM.writeTChan predictionsChannel ContractualPrediction{..}
-    infiniteOutputToPredictionsChannelLink outputHandle priceChannel predictionsChannel
+    infiniteOutputToPredictionsChannelLink outputHandle predictionsChannel

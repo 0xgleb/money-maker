@@ -58,7 +58,7 @@ ghc-options:
 - -Wsemigroup
 
 data-files:
-- soothsayer/example.py
+- ../soothsayer/example.py
 
 executables:
   make-money:
