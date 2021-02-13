@@ -1,0 +1,77 @@
+name:                exe
+version:             0.1.0.0
+license:             BSD3
+author:              "Author name here"
+maintainer:          "example@example.com"
+copyright:           "2020 Author name here"
+
+default-extensions:
+- BangPatterns
+- BlockArguments
+- ConstraintKinds
+- DefaultSignatures
+- DeriveDataTypeable
+- DeriveGeneric
+- DeriveLift
+- DeriveTraversable  # Implies: DeriveFoldable, DeriveFunctor
+- DerivingVia  # Implies: DerivingStrategies
+- DuplicateRecordFields
+- EmptyCase
+- FlexibleContexts
+- FlexibleInstances  # Implies: TypeSynonymInstances
+- FunctionalDependencies  # Implies: MultiParamTypeClasses
+- GADTs  # Implies: GADTSyntax, MonoLocalBinds
+- GeneralizedNewtypeDeriving
+- InstanceSigs
+- LambdaCase
+- MagicHash
+- MultiParamTypeClasses  # Implies: ConstrainedClassMethods
+- NamedFieldPuns
+- NoImplicitPrelude
+- NoMonomorphismRestriction
+- NoStarIsType
+- NumericUnderscores
+- OverloadedStrings
+- PatternSynonyms
+- QuasiQuotes
+- RankNTypes  # Implies: ExplicitForAll
+- RecordWildCards  # Implies: DisambiguateRecordFields
+- ScopedTypeVariables  # Implies: ExplicitForAll
+- StandaloneDeriving
+- TupleSections
+- TypeApplications
+- TypeFamilyDependencies  # Implies: TypeFamilies
+- TypeInType  # Implies: DataKinds, KindSignatures, PolyKinds
+- TypeOperators  # Implies: ExplicitNamespaces
+- ViewPatterns
+
+ghc-options:
+- -freverse-errors
+- -Wall
+- -Werror
+- -Wimplicit-prelude
+- -Wincomplete-record-updates
+- -Wmissing-home-modules
+- -Wnoncanonical-monad-instances
+- -Wnoncanonical-monoid-instances
+- -Wpartial-fields
+- -Wsemigroup
+
+data-files:
+- ../soothsayer/example.py
+
+executables:
+  make-money:
+    main:                Main.hs
+    source-dirs:         src
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    - -O2
+    dependencies:
+    - base
+    - process
+    - protolude
+    - text
+    - stm
