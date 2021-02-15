@@ -4,6 +4,7 @@ import Protolude
 
 import qualified Control.Concurrent.STM as STM
 import qualified Data.Text.Lazy.IO      as Txt.LIO
+import qualified Network.WebSockets     as WS
 import qualified Paths_exe              as Path
 import qualified System.IO              as IO
 import qualified System.Process         as Proc
@@ -27,6 +28,7 @@ main = do
     -- into the price data queue
     getLivePriceData :: STM.TQueue ContractualPriceData -> IO ()
     getLivePriceData priceDataQueue = do
+      withSocketsDo $ WS.runClient "stream.binance.com" 9443 "/ws/BTCUSD@kline_1m" app
       message <- getLine
       STM.atomically $ STM.writeTQueue priceDataQueue ContractualPriceData{..}
 
