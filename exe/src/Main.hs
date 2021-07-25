@@ -1,5 +1,7 @@
 module Main where
 
+import MoneyMaker.Coinbase.Websockets
+
 import Protolude
 
 import qualified Control.Concurrent.STM as STM
@@ -9,14 +11,21 @@ import qualified Paths_exe              as Path
 import qualified System.IO              as IO
 import qualified System.Process         as Proc
 
+data Mode
+  = TestMode
+  | ProdMode
+  deriving stock (Show, Eq)
+
 main :: IO ()
 main = do
+  let mode = TestMode
+
   IO.hSetBuffering IO.stdin IO.NoBuffering -- we only need this for testing with getLine
   IO.hSetBuffering IO.stdout IO.NoBuffering -- we only need this for testing with getLine
 
   (priceDataQueue, predictionQueue) <- spawnPredictionProcessAndBindToQueues
 
-  void $ forkIO $ forever $ getLivePriceData priceDataQueue
+  void $ forkIO $ forever $ getLivePriceData mode priceDataQueue
 
   void $ forever $ do
     prediction <- STM.atomically $ STM.readTQueue predictionQueue
@@ -24,11 +33,16 @@ main = do
 
   where
     -- placeholder for the function that will get live price data from the
-    -- Binance Websockets API, process it, and write relevant information
+    -- Coinbase Pro Websockets API, process it, and write relevant information
     -- into the price data queue
-    getLivePriceData :: STM.TQueue ContractualPriceData -> IO ()
-    getLivePriceData priceDataQueue = do
-      withSocketsDo $ WS.runClient "stream.binance.com" 9443 "/ws/BTCUSD@kline_1m" app
+    getLivePriceData :: Mode -> STM.TQueue ContractualPriceData -> IO ()
+    getLivePriceData mode priceDataQueue = do
+      let websocketUrl = case mode of
+            ProdMode -> "wss://ws-feed.pro.coinbase.com"
+            TestMode -> "wss://ws-feed-public.sandbox.pro.coinbase.com"
+
+      withSocketsDo $ WS.runClient websocketUrl 9443 "/ws/BTCUSD@kline_1m" app
+
       message <- getLine
       STM.atomically $ STM.writeTQueue priceDataQueue ContractualPriceData{..}
 
