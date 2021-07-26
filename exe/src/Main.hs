@@ -1,6 +1,6 @@
 module Main where
 
-import MoneyMaker.Coinbase.Websockets
+import qualified MoneyMaker.Coinbase.Websockets as Coinbase
 
 import Protolude
 
@@ -41,10 +41,10 @@ main = do
             ProdMode -> "wss://ws-feed.pro.coinbase.com"
             TestMode -> "wss://ws-feed-public.sandbox.pro.coinbase.com"
 
-      withSocketsDo $ WS.runClient websocketUrl 9443 "/ws/BTCUSD@kline_1m" app
+      WS.runClient websocketUrl 9443 "/ws/BTCUSD@kline_1m" $ Coinbase.app priceDataQueue
 
-      message <- getLine
-      STM.atomically $ STM.writeTQueue priceDataQueue ContractualPriceData{..}
+      -- message <- getLine
+      -- STM.atomically $ STM.writeTQueue priceDataQueue ContractualPriceData{..}
 
     -- placeholder for the function that will take a new prediction from the
     -- prediction process and evaluate whether it needs to make any changes
