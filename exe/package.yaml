@@ -76,4 +76,4 @@ executables:
     - text
     - stm
     - websockets
-    - money-maker-coinbase-websockets-sdk
+    - money-maker-coinbase-sdk

@@ -30,7 +30,7 @@ resolver: lts-16.29
 #   - wai
 packages:
 - ./exe
-- ./lib/coinbase-websockets-sdk
+- ./lib/coinbase-sdk
 - ./lib/error
 
 # Dependency packages to be pulled from upstream that are not in the resolver.

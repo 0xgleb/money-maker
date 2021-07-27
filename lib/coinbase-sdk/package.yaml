@@ -1,4 +1,4 @@
-name:                money-maker-coinbase-websockets-sdk
+name:                money-maker-coinbase-sdk
 version:             0.1.0.0
 license:             BSD3
 
@@ -65,17 +65,17 @@ ghc-options:
 - -Wsemigroup
 - -Wno-unticked-promoted-constructors # don't complain about unticked type-level promoted constructors
 
-# tests:
-#   eventer-test:
-#     main:                Spec.hs
-#     source-dirs:         test
-#     ghc-options:
-#     - -threaded
-#     - -rtsopts
-#     - -with-rtsopts=-N
-#     dependencies:
-#     - eventer
-#     - hspec
-#     - QuickCheck
-#     # - generic-random
-#     # - quickcheck-text
+tests:
+  money-maker-coinbase-sdk-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - money-maker-coinbase-sdk
+    - hspec
+    - aeson
+    - aeson-qq
+    - QuickCheck

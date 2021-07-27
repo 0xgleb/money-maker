@@ -1,5 +1,10 @@
-module MoneyMaker.Coinbase.Websockets
+module MoneyMaker.Coinbase.SDK.Websockets
   ( app
+
+  , SubscribeMessage(..)
+  , TradingPair(..)
+  , Currency(..)
+  , Channel(..)
   )
   where
 
@@ -29,21 +34,25 @@ app _queue conn = do
 
   WS.sendClose conn ("Bye!" :: Text)
 
--- {
---     "type": "subscribe",
---     "product_ids": [
---         "ETH-USD",
---         "ETH-EUR"
---     ],
---     "channels": [
---         "level2",
---         "heartbeat",
---         {
---             "name": "ticker",
---             "product_ids": [
---                 "ETH-BTC",
---                 "ETH-USD"
---             ]
---         }
---     ]
--- }
+data SubscribeMessage
+  = SubscribeMessage
+      { productIds :: [TradingPair]
+      , channels   :: [Channel]
+      }
+
+data TradingPair
+  = TradingPair
+      { baseCurrency :: Currency
+      , quoteCurrency :: Currency
+      }
+
+data Currency
+  = ETH
+  | EUR
+  | USD
+  | BTC
+
+data Channel
+  = Level2
+  | Heartbeat
+  | Ticker [TradingPair]
