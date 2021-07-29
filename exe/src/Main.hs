@@ -1,6 +1,6 @@
 module Main where
 
-import qualified MoneyMaker.Coinbase.Websockets as Coinbase
+import qualified MoneyMaker.Coinbase.SDK.Websockets as Coinbase
 
 import Protolude
 

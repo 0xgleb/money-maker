@@ -10,16 +10,33 @@ import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.QQ as Aeson
 
 import Test.Hspec
+import Test.Hspec.Expectations.Json
 
 spec :: Spec
-spec = _ -- do
+spec = do
   describe "ToJSON SubscribeMessage" $ do
     it "correctly encodes into the sample payload" $ do
-  --     getUltraEither (computeCurrentState @_ @[NoEventsFoundError, UserEventError] exampleUserEvents)
-  --       `shouldBe` (Right exampleUser)
+      Aeson.toJSON sampleSubscribeMessage `shouldBeUnorderedJson` sampleSubscribeMessageJSON
 
-samplePayload :: Aeson.Value
-samplePayload =
+sampleSubscribeMessage :: SubscribeMessage
+sampleSubscribeMessage
+  = SubscribeMessage
+      { productIds =
+          [ TradingPair ETH USD
+          , TradingPair ETH EUR
+          ]
+      , channels =
+          [ Level2
+          , Heartbeat
+          , Ticker
+              [ TradingPair ETH BTC
+              , TradingPair ETH USD
+              ]
+          ]
+      }
+
+sampleSubscribeMessageJSON :: Aeson.Value
+sampleSubscribeMessageJSON =
   [Aeson.aesonQQ|
   {
       "type": "subscribe",

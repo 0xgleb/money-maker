@@ -4,6 +4,7 @@ license:             BSD3
 
 dependencies:
 - base
+- aeson
 - protolude
 - network
 - websockets
@@ -76,6 +77,6 @@ tests:
     dependencies:
     - money-maker-coinbase-sdk
     - hspec
-    - aeson
+    - hspec-expectations-json
     - aeson-qq
     - QuickCheck
