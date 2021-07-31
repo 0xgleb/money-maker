@@ -70,10 +70,11 @@ executables:
     - -with-rtsopts=-N
     - -O2
     dependencies:
+    - money-maker-coinbase-sdk
     - base
     - process
     - protolude
     - text
     - stm
-    - websockets
-    - money-maker-coinbase-sdk
+    # - websockets
+    - wuss

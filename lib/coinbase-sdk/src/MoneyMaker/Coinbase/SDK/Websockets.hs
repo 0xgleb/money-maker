@@ -1,7 +1,11 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
 module MoneyMaker.Coinbase.SDK.Websockets
   ( app
+
+  , CoinbaseMessage(..)
+  , ContractualPriceData(..)
 
   , SubscribeMessage(..)
   , TradingPair(..)
@@ -12,16 +16,19 @@ module MoneyMaker.Coinbase.SDK.Websockets
 
 import qualified Control.Concurrent.STM as STM
 import qualified Data.Aeson as Aeson
-import Data.Aeson ((.=))
+import qualified Data.Text as Txt
+import Data.Aeson ((.=), (.:))
 -- import qualified Network.Socket         as Socket
 import qualified Network.WebSockets     as WS
 import           Protolude
+import qualified Control.Monad.Fail as Fail
 
-app :: STM.TQueue a -> WS.ClientApp ()
+app :: STM.TQueue ContractualPriceData -> WS.ClientApp ()
 app _queue conn = do
-  putStrLn @Text "Connected!"
+  putStrLn @Text "Connected to Coinbase Websockets!"
 
-  -- TODO: send a subscribe message
+  -- send subscribe message to tell coinbase what messages to send back
+  WS.sendTextData conn $ Aeson.encode subscribeMessage
 
   -- Fork a thread that writes WS data to stdout
   -- _ <- forkIO $ forever $ do
@@ -37,6 +44,43 @@ app _queue conn = do
   -- loop
 
   WS.sendClose conn ("Bye!" :: Text)
+
+data CoinbaseMessage
+  = UnknownMessage LByteString
+  | Ticker ContractualPriceData
+  deriving stock (Eq, Show)
+
+-- I think using "Contractual" prefix can help identify which types have to have
+-- a certain encoding to not break the contract with the prediction mechanism
+data ContractualPriceData
+  = ContractualPriceData
+      { productId :: TradingPair
+      , price :: Text -- TODO: change to a better type for price data
+      }
+  deriving stock (Eq, Show)
+
+instance Aeson.FromJSON CoinbaseMessage where
+  parseJSON value
+    = ($ value) $ Aeson.withObject "CoinbaseMessage"
+    $ \object -> (object .: "type") >>= \case
+        ("ticker" :: Text) ->
+          Ticker <$> Aeson.parseJSON (Aeson.Object object)
+        _ ->
+          pure $ UnknownMessage $ Aeson.encode value
+
+instance Aeson.FromJSON ContractualPriceData where
+  parseJSON
+    = Aeson.withObject "ContractualPriceData" $ \object -> do
+        productId <- object .: "product_id"
+        price     <- object .: "price"
+        pure ContractualPriceData{..}
+
+subscribeMessage :: SubscribeMessage
+subscribeMessage
+  = SubscribeMessage
+      { productIds = [TradingPair BTC USD]
+      , channels = [TickerChannel []]
+      }
 
 data SubscribeMessage
   = SubscribeMessage
@@ -56,31 +100,47 @@ data TradingPair
       { baseCurrency :: Currency
       , quoteCurrency :: Currency
       }
+  deriving stock (Eq, Show)
 
 instance Aeson.ToJSON TradingPair where
   toJSON TradingPair{..}
     = Aeson.String $ show baseCurrency <> "-" <> show quoteCurrency
+
+instance Aeson.FromJSON TradingPair where
+  parseJSON = Aeson.withText "TradingPair" $ \text -> do
+    let [baseCoin, quoteCoin] = Txt.splitOn "-" text
+    case (readMaybe $ toS baseCoin, readMaybe $ toS quoteCoin) of
+      (Just baseCurrency, Just quoteCurrency) ->
+        pure TradingPair{..}
+      _ ->
+        Fail.fail $ "Invalid trading pair: " <> toS text
 
 data Currency
   = ETH
   | EUR
   | USD
   | BTC
-  deriving stock (Show)
+  deriving stock (Eq, Show, Read)
 
 data Channel
-  = Level2
-  | Heartbeat
-  | Ticker [TradingPair]
+  = Level2Channel [TradingPair]
+  | HeartbeatChannel [TradingPair]
+  | TickerChannel [TradingPair]
 
 instance Aeson.ToJSON Channel where
   toJSON = \case
-    Level2 ->
-      Aeson.String "level2"
-    Heartbeat ->
-      Aeson.String "heartbeat"
-    Ticker pairs ->
-      Aeson.object
-        [ "name" .= ("ticker" :: Text)
-        , "product_ids" .= pairs
-        ]
+    Level2Channel pairs ->
+      channelToJSON "level2" pairs
+    HeartbeatChannel pairs ->
+      channelToJSON "heartbeat" pairs
+    TickerChannel pairs ->
+      channelToJSON "ticker" pairs
+    where
+      channelToJSON (name :: Text) = \case
+        [] ->
+          Aeson.String name
+        pairs ->
+          Aeson.object
+            [ "name" .= name
+            , "product_ids" .= pairs
+            ]
