@@ -47,9 +47,6 @@ main = do
             ProdMode -> "ws-feed.pro.coinbase.com"
             TestMode -> "ws-feed-public.sandbox.pro.coinbase.com"
 
-
-      putStrLn $ "Trynna runClient with host: " <> websocketHost
-
       Wuss.runSecureClient websocketHost 443 "/" $ Coinbase.websocketsClient $ \newPriceData ->
         STM.atomically $ STM.writeTQueue priceDataQueue $ toContractualPriceData newPriceData
 

@@ -19,7 +19,7 @@ import qualified Data.Aeson as Aeson
 data ContractualPriceData
   = ContractualPriceData
       { productId :: Coinbase.TradingPair
-      , price :: Text -- TODO: change to a better type for price data
+      , price     :: Text -- TODO: change to a better type for price data
       }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (Aeson.ToJSON)
