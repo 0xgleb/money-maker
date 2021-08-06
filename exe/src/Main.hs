@@ -1,10 +1,13 @@
 module Main where
 
+import Contract
+
 import qualified MoneyMaker.Coinbase.SDK.Websockets as Coinbase
 
 import Protolude
 
 import qualified Control.Concurrent.STM as STM
+import qualified Data.Aeson             as Aeson
 import qualified Data.Text.Lazy.IO      as Txt.LIO
 import qualified Paths_exe              as Path
 import qualified System.IO              as IO
@@ -38,7 +41,7 @@ main = do
     -- placeholder for the function that will get live price data from the
     -- Coinbase Pro Websockets API, process it, and write relevant information
     -- into the price data queue
-    getLivePriceData :: Mode -> STM.TQueue Coinbase.ContractualPriceData -> IO ()
+    getLivePriceData :: Mode -> STM.TQueue ContractualPriceData -> IO ()
     getLivePriceData mode priceDataQueue = do
       let websocketHost = case mode of
             ProdMode -> "ws-feed.pro.coinbase.com"
@@ -47,7 +50,8 @@ main = do
 
       putStrLn $ "Trynna runClient with host: " <> websocketHost
 
-      Wuss.runSecureClient websocketHost 443 "/" $ Coinbase.app priceDataQueue
+      Wuss.runSecureClient websocketHost 443 "/" $ Coinbase.app $ \newPriceData ->
+        STM.atomically $ STM.writeTQueue priceDataQueue $ toContractualPriceData newPriceData
 
     -- placeholder for the function that will take a new prediction from the
     -- prediction process and evaluate whether it needs to make any changes
@@ -61,7 +65,7 @@ data ContractualPrediction
       }
 
 spawnPredictionProcessAndBindToQueues
-  :: IO (STM.TQueue Coinbase.ContractualPriceData, STM.TQueue ContractualPrediction)
+  :: IO (STM.TQueue ContractualPriceData, STM.TQueue ContractualPrediction)
 spawnPredictionProcessAndBindToQueues = do
   priceDataQueue <- STM.newTQueueIO
   predictionsQueue <- STM.newTQueueIO
@@ -103,12 +107,14 @@ newtype InputHandle
 -- and doesn't just continuously run in an infinite loop is the @atomically@
 -- function, which blocks execution until there is something in the queue
 bindPriceDataQueueToProcessInput
-  :: STM.TQueue Coinbase.ContractualPriceData
+  :: STM.TQueue ContractualPriceData
   -> InputHandle
   -> IO ()
 bindPriceDataQueueToProcessInput priceDataQueue inputHandle = do
-  Coinbase.ContractualPriceData{..} <- STM.atomically $ STM.readTQueue priceDataQueue
-  hPutStrLn @Text (unpackInputHandle inputHandle) price
+  contractualPriceData <- STM.atomically $ STM.readTQueue priceDataQueue
+
+  hPutStrLn (unpackInputHandle inputHandle) $ Aeson.encode contractualPriceData
+
   bindPriceDataQueueToProcessInput priceDataQueue inputHandle
 
 newtype OutputHandle

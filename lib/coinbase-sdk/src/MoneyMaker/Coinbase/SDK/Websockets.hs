@@ -5,7 +5,7 @@ module MoneyMaker.Coinbase.SDK.Websockets
   ( app
 
   , CoinbaseMessage(..)
-  , ContractualPriceData(..)
+  , TickerPriceData(..)
 
   , SubscribeMessage(..)
   , TradingPair(..)
@@ -14,17 +14,17 @@ module MoneyMaker.Coinbase.SDK.Websockets
   )
   where
 
-import qualified Control.Concurrent.STM as STM
+import Protolude
+
 import qualified Data.Aeson as Aeson
-import qualified Data.Text as Txt
+import qualified Data.Text  as Txt
 import Data.Aeson ((.=), (.:))
 -- import qualified Network.Socket         as Socket
 import qualified Network.WebSockets     as WS
-import           Protolude
 import qualified Control.Monad.Fail as Fail
 
-app :: STM.TQueue ContractualPriceData -> WS.ClientApp ()
-app priceDataQueue conn = do
+app :: (TickerPriceData -> IO ()) -> WS.ClientApp ()
+app writeNewPriceDataToQueue conn = do
   putStrLn @Text "Connected to Coinbase Websockets!"
 
   -- send subscribe message to tell coinbase what messages to send back
@@ -41,19 +41,17 @@ app priceDataQueue conn = do
           UnknownMessage unknownMessage ->
             putStrLn $ "Unknown message: " <> unknownMessage
           Ticker newPriceData ->
-            STM.atomically $ STM.writeTQueue priceDataQueue newPriceData
+            writeNewPriceDataToQueue newPriceData
 
   WS.sendClose conn ("Bye!" :: Text)
 
 data CoinbaseMessage
   = UnknownMessage LByteString
-  | Ticker ContractualPriceData
+  | Ticker TickerPriceData
   deriving stock (Eq, Show)
 
--- I think using "Contractual" prefix can help identify which types have to have
--- a certain encoding to not break the contract with the prediction mechanism
-data ContractualPriceData
-  = ContractualPriceData
+data TickerPriceData
+  = TickerPriceData
       { productId :: TradingPair
       , price :: Text -- TODO: change to a better type for price data
       }
@@ -68,12 +66,12 @@ instance Aeson.FromJSON CoinbaseMessage where
         _ ->
           pure $ UnknownMessage $ Aeson.encode value
 
-instance Aeson.FromJSON ContractualPriceData where
+instance Aeson.FromJSON TickerPriceData where
   parseJSON
-    = Aeson.withObject "ContractualPriceData" $ \object -> do
+    = Aeson.withObject "TickerPriceData" $ \object -> do
         productId <- object .: "product_id"
         price     <- object .: "price"
-        pure ContractualPriceData{..}
+        pure TickerPriceData{..}
 
 subscribeMessage :: SubscribeMessage
 subscribeMessage

@@ -24,7 +24,7 @@ spec = do
 
 sampleTickerMessage :: CoinbaseMessage
 sampleTickerMessage
-  = Ticker ContractualPriceData
+  = Ticker TickerPriceData
       { productId = TradingPair BTC USD
       , price = "41438.8"
       }
