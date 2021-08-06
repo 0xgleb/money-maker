@@ -3,6 +3,8 @@
 module Contract
   ( ContractualPriceData
   , toContractualPriceData
+
+  , ContractualPrediction(..)
   )
   where
 
@@ -25,3 +27,9 @@ data ContractualPriceData
 toContractualPriceData :: Coinbase.TickerPriceData -> ContractualPriceData
 toContractualPriceData Coinbase.TickerPriceData{..}
   = ContractualPriceData{..}
+
+-- Just a placeholder until Python actually sends some useful data
+data ContractualPrediction
+  = ContractualPrediction
+      { message :: LText
+      }

@@ -50,19 +50,14 @@ main = do
 
       putStrLn $ "Trynna runClient with host: " <> websocketHost
 
-      Wuss.runSecureClient websocketHost 443 "/" $ Coinbase.app $ \newPriceData ->
+      Wuss.runSecureClient websocketHost 443 "/" $ Coinbase.websocketsClient $ \newPriceData ->
         STM.atomically $ STM.writeTQueue priceDataQueue $ toContractualPriceData newPriceData
 
     -- placeholder for the function that will take a new prediction from the
     -- prediction process and evaluate whether it needs to make any changes
     -- to the portfolio based on that
     handlePrediction ContractualPrediction{..} = do
-      putStrLn $ "Got back: " <> message
-
-data ContractualPrediction
-  = ContractualPrediction
-      { message :: LText
-      }
+      putStrLn $ "Got back: \"" <> message <> "\""
 
 spawnPredictionProcessAndBindToQueues
   :: IO (STM.TQueue ContractualPriceData, STM.TQueue ContractualPrediction)

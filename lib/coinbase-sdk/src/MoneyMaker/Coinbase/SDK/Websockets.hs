@@ -1,8 +1,8 @@
-{-# LANGUAGE ApplicativeDo #-}
+{-# LANGUAGE ApplicativeDo  #-}
 {-# LANGUAGE DeriveAnyClass #-}
 
 module MoneyMaker.Coinbase.SDK.Websockets
-  ( app
+  ( websocketsClient
 
   , CoinbaseMessage(..)
   , TickerPriceData(..)
@@ -16,15 +16,14 @@ module MoneyMaker.Coinbase.SDK.Websockets
 
 import Protolude
 
-import qualified Data.Aeson as Aeson
-import qualified Data.Text  as Txt
-import Data.Aeson ((.=), (.:))
--- import qualified Network.Socket         as Socket
-import qualified Network.WebSockets     as WS
+import qualified Data.Aeson         as Aeson
+import qualified Data.Text          as Txt
+import           Data.Aeson         ((.=), (.:))
+import qualified Network.WebSockets as WS
 import qualified Control.Monad.Fail as Fail
 
-app :: (TickerPriceData -> IO ()) -> WS.ClientApp ()
-app writeNewPriceDataToQueue conn = do
+websocketsClient :: (TickerPriceData -> IO ()) -> WS.ClientApp ()
+websocketsClient writeNewPriceDataToQueue conn = do
   putStrLn @Text "Connected to Coinbase Websockets!"
 
   -- send subscribe message to tell coinbase what messages to send back
@@ -43,7 +42,8 @@ app writeNewPriceDataToQueue conn = do
           Ticker newPriceData ->
             writeNewPriceDataToQueue newPriceData
 
-  WS.sendClose conn ("Bye!" :: Text)
+  -- TODO: add a mechanisms for safely closing connections and killing threads
+  -- WS.sendClose conn ("Bye!" :: Text)
 
 data CoinbaseMessage
   = UnknownMessage LByteString
@@ -53,7 +53,7 @@ data CoinbaseMessage
 data TickerPriceData
   = TickerPriceData
       { productId :: TradingPair
-      , price :: Text -- TODO: change to a better type for price data
+      , price     :: Text -- TODO: change to a better type for price data
       }
   deriving stock (Eq, Show)
 
@@ -77,7 +77,7 @@ subscribeMessage :: SubscribeMessage
 subscribeMessage
   = SubscribeMessage
       { productIds = [TradingPair BTC USD]
-      , channels = [TickerChannel []]
+      , channels   = [TickerChannel []]
       }
 
 data SubscribeMessage
@@ -95,7 +95,7 @@ instance Aeson.ToJSON SubscribeMessage where
 
 data TradingPair
   = TradingPair
-      { baseCurrency :: Currency
+      { baseCurrency  :: Currency
       , quoteCurrency :: Currency
       }
   deriving stock (Eq, Show)
