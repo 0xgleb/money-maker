@@ -24,24 +24,24 @@ import           Protolude
 import qualified Control.Monad.Fail as Fail
 
 app :: STM.TQueue ContractualPriceData -> WS.ClientApp ()
-app _queue conn = do
+app priceDataQueue conn = do
   putStrLn @Text "Connected to Coinbase Websockets!"
 
   -- send subscribe message to tell coinbase what messages to send back
   WS.sendTextData conn $ Aeson.encode subscribeMessage
 
-  -- Fork a thread that writes WS data to stdout
-  -- _ <- forkIO $ forever $ do
-  _ <- forever $ do
-      msg <- WS.receiveData conn
-      liftIO $ putStrLn @Text msg
+  void $ forever $ do
+    msg <- WS.receiveData conn
+    liftIO $ case Aeson.decode @CoinbaseMessage msg of
+      Nothing ->
+        putStrLn $ "Couldn't decode message: " <> msg
 
-  -- -- Read from stdin and write to WS
-  -- let loop = do
-  --       line <- getLine
-  --       unless (line == "") $ WS.sendTextData conn line >> loop
-
-  -- loop
+      Just message ->
+        case message of
+          UnknownMessage unknownMessage ->
+            putStrLn $ "Unknown message: " <> unknownMessage
+          Ticker newPriceData ->
+            STM.atomically $ STM.writeTQueue priceDataQueue newPriceData
 
   WS.sendClose conn ("Bye!" :: Text)
 

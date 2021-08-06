@@ -6,9 +6,9 @@ import Protolude
 
 import qualified Control.Concurrent.STM as STM
 import qualified Data.Text.Lazy.IO      as Txt.LIO
--- import qualified Paths_exe              as Path
+import qualified Paths_exe              as Path
 import qualified System.IO              as IO
--- import qualified System.Process         as Proc
+import qualified System.Process         as Proc
 import qualified Wuss
 
 data Mode
@@ -20,17 +20,19 @@ main :: IO ()
 main = do
   let mode = TestMode
 
+  when (mode == ProdMode)
+    $ putStrLn @Text "WARNING: RUNNING IN PROD MODE!"
+
   IO.hSetBuffering IO.stdin IO.NoBuffering -- we only need this for testing with getLine
   IO.hSetBuffering IO.stdout IO.NoBuffering -- we only need this for testing with getLine
 
-  (priceDataQueue, _predictionQueue) <- spawnPredictionProcessAndBindToQueues
+  (priceDataQueue, predictionQueue) <- spawnPredictionProcessAndBindToQueues
 
-  -- void $ forkIO $ forever $ getLivePriceData mode priceDataQueue
-  void $ getLivePriceData mode priceDataQueue
+  void $ forkIO $ getLivePriceData mode priceDataQueue
 
-  -- void $ forever $ do
-  --   prediction <- STM.atomically $ STM.readTQueue predictionQueue
-  --   handlePrediction prediction
+  void $ forever $ do
+    prediction <- STM.atomically $ STM.readTQueue predictionQueue
+    handlePrediction prediction
 
   where
     -- placeholder for the function that will get live price data from the
@@ -47,14 +49,11 @@ main = do
 
       Wuss.runSecureClient websocketHost 443 "/" $ Coinbase.app priceDataQueue
 
-      -- message <- getLine
-      -- STM.atomically $ STM.writeTQueue priceDataQueue Coinbase.ContractualPriceData{..}
-
-    -- -- placeholder for the function that will take a new prediction from the
-    -- -- prediction process and evaluate whether it needs to make any changes
-    -- -- to the portfolio based on that
-    -- handlePrediction ContractualPrediction{..} = do
-    --   putStrLn $ "Got back: " <> message
+    -- placeholder for the function that will take a new prediction from the
+    -- prediction process and evaluate whether it needs to make any changes
+    -- to the portfolio based on that
+    handlePrediction ContractualPrediction{..} = do
+      putStrLn $ "Got back: " <> message
 
 data ContractualPrediction
   = ContractualPrediction
@@ -67,52 +66,50 @@ spawnPredictionProcessAndBindToQueues = do
   priceDataQueue <- STM.newTQueueIO
   predictionsQueue <- STM.newTQueueIO
 
-  -- (inputHandle, outputHandle, processHandle) <- createProcess "example"
-  -- -- TODO: try pinging the process before spawning everything else
+  (inputHandle, outputHandle, processHandle) <- createProcess "example"
+  -- TODO: try pinging the process before spawning everything else
 
-  -- -- need a separate thread to run the infinite loop
-  -- void $ forkIO $ do
-  --   bindPriceDataQueueToProcessInput priceDataQueue inputHandle
-  --   void $ Proc.terminateProcess processHandle
+  -- need a separate thread to run the infinite loop
+  void $ forkIO $ do
+    bindPriceDataQueueToProcessInput priceDataQueue inputHandle
+    void $ Proc.terminateProcess processHandle
 
-  -- -- need a separate thread to run the infinite loop
-  -- void $ forkIO
-  --   $ bindProcessOutputToPredictionsQueue outputHandle predictionsQueue
+  -- need a separate thread to run the infinite loop
+  void $ forkIO
+    $ bindProcessOutputToPredictionsQueue outputHandle predictionsQueue
 
   pure (priceDataQueue, predictionsQueue)
 
-  -- where
-  --   createProcess strategy = do
-  --     scriptPath <- Path.getDataFileName $ "../soothsayer/" <> strategy <> ".py"
+  where
+    createProcess strategy = do
+      scriptPath <- Path.getDataFileName $ "../soothsayer/" <> strategy <> ".py"
 
-  --     (Just inputHandle, Just outputHandle, _, processHandle) <-
-  --       Proc.createProcess (Proc.proc "/usr/bin/python3" [scriptPath])
-  --         { Proc.std_in = Proc.CreatePipe, Proc.std_out = Proc.CreatePipe }
+      (Just inputHandle, Just outputHandle, _, processHandle) <-
+        Proc.createProcess (Proc.proc "/usr/bin/python3" [scriptPath])
+          { Proc.std_in = Proc.CreatePipe, Proc.std_out = Proc.CreatePipe }
 
-  --     IO.hSetBuffering inputHandle  IO.NoBuffering
-  --     IO.hSetBuffering outputHandle IO.NoBuffering
+      IO.hSetBuffering inputHandle  IO.NoBuffering
+      IO.hSetBuffering outputHandle IO.NoBuffering
 
-  --     pure (InputHandle inputHandle, OutputHandle outputHandle, processHandle)
+      pure (InputHandle inputHandle, OutputHandle outputHandle, processHandle)
 
 newtype InputHandle
   = InputHandle { unpackInputHandle :: Handle }
   deriving newtype (Show)
 
--- -- | This function reads from the queue whenever there is something in there
--- -- and writes the new data into the input handle of the predictions process.
--- -- The reason it only reads from the queue whenver there is something in there
--- -- and doesn't just continuously run in an infinite loop is the @atomically@
--- -- function, which blocks execution until there is something in the queue
--- bindPriceDataQueueToProcessInput
---   :: STM.TQueue Coinbase.ContractualPriceData
---   -> InputHandle
---   -> IO ()
--- bindPriceDataQueueToProcessInput priceDataQueue inputHandle = do
---   Coinbase.ContractualPriceData{..} <- STM.atomically $ STM.readTQueue priceDataQueue
---   let shouldStop = message == "stop"
---   unless shouldStop $ do
---     hPutStrLn @Text (unpackInputHandle inputHandle) message
---     bindPriceDataQueueToProcessInput priceDataQueue inputHandle
+-- | This function reads from the queue whenever there is something in there
+-- and writes the new data into the input handle of the predictions process.
+-- The reason it only reads from the queue whenver there is something in there
+-- and doesn't just continuously run in an infinite loop is the @atomically@
+-- function, which blocks execution until there is something in the queue
+bindPriceDataQueueToProcessInput
+  :: STM.TQueue Coinbase.ContractualPriceData
+  -> InputHandle
+  -> IO ()
+bindPriceDataQueueToProcessInput priceDataQueue inputHandle = do
+  Coinbase.ContractualPriceData{..} <- STM.atomically $ STM.readTQueue priceDataQueue
+  hPutStrLn @Text (unpackInputHandle inputHandle) price
+  bindPriceDataQueueToProcessInput priceDataQueue inputHandle
 
 newtype OutputHandle
   = OutputHandle { unpackOutputHandle :: Handle }
