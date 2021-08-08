@@ -1,9 +1,17 @@
-name:                exe
+name:                money-maker-eventful
 version:             0.1.0.0
 license:             BSD3
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2020 Author name here"
+
+dependencies:
+- base
+- aeson
+- protolude
+- template-haskell
+- uuid
+- money-maker-error
+
+library:
+  source-dirs: src
 
 default-extensions:
 - BangPatterns
@@ -46,8 +54,8 @@ default-extensions:
 - ViewPatterns
 
 ghc-options:
-- -freverse-errors
-- -Wall
+- -freverse-errors # reverses the order of errors
+- -Wall # all the next options turn on warnings and turn them into errors
 - -Werror
 - -Wimplicit-prelude
 - -Wincomplete-record-updates
@@ -56,26 +64,19 @@ ghc-options:
 - -Wnoncanonical-monoid-instances
 - -Wpartial-fields
 - -Wsemigroup
+- -Wno-unticked-promoted-constructors # don't complain about unticked type-level promoted constructors
 
-data-files:
-- ../soothsayer/example.py
-
-executables:
-  make-money:
-    main:                Main.hs
-    source-dirs:         src
+tests:
+  money-maker-eventer-test:
+    main:                Spec.hs
+    source-dirs:         test
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    - -O2
     dependencies:
-    - money-maker-coinbase-sdk
     - money-maker-eventful
-    - base
-    - aeson
-    - process
-    - protolude
-    - text
-    - stm
-    - wuss
+    - hspec
+    - QuickCheck
+    # - generic-random
+    # - quickcheck-text
