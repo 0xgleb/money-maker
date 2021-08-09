@@ -11,6 +11,9 @@ module MoneyMaker.Error
   , OneOf(..)
   , getOneOf
   , UltraEither(..)
+
+  , UltraExceptT(..)
+  , runUltraExceptTWithoutErrors
   )
   where
 
@@ -188,3 +191,40 @@ instance MonadUltraError UltraEither where
     = case getOneOf error of
         Left err  -> UltraEither $ Left err
         Right err -> handleError err
+
+-- | Newtype around @Either@ that
+newtype UltraExceptT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
+  = UltraExceptT { getUltraExceptT :: ExceptT (OneOf errors) m a }
+  deriving newtype (Functor, Applicative, Monad)
+
+liftToUltraExceptT :: Monad m => m a -> UltraExceptT m errors a
+liftToUltraExceptT
+  = UltraExceptT . lift
+
+runUltraExceptTWithoutErrors :: Monad m => UltraExceptT m '[] a -> m a
+runUltraExceptTWithoutErrors UltraExceptT{..} = do
+  result <- runExceptT getUltraExceptT
+  case result of
+    Right rightResult ->
+      pure rightResult
+    Left error ->
+      case error of
+
+instance Monad m => MonadUltraError (UltraExceptT m) where
+  throwUltraError error
+    = UltraExceptT $ throwError $ mkOneOf error
+
+  catchUltraErrorMethod
+    :: forall error errors a
+     . UltraExceptT m (error:errors) a -- UltraExceptT (ExceptT (thing :: m (Either)))
+    -> (error -> UltraExceptT m errors a)
+    -> UltraExceptT m errors a
+  catchUltraErrorMethod (UltraExceptT failableAction) handleError = do
+    result <- liftToUltraExceptT $ runExceptT failableAction
+    case result of
+      Right val ->
+        pure val
+      Left (error :: OneOf (error:errors)) ->
+        case getOneOf error of
+          Left (err :: OneOf errors)  -> UltraExceptT $ throwError err
+          Right (err :: error) -> handleError err
