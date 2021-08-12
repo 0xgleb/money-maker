@@ -13,7 +13,9 @@ module MoneyMaker.Error
   , UltraEither(..)
 
   , UltraExceptT(..)
+  , runUltraExceptT
   , runUltraExceptTWithoutErrors
+  , liftToUltraExceptT
   )
   where
 
@@ -197,10 +199,15 @@ newtype UltraExceptT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
   = UltraExceptT { getUltraExceptT :: ExceptT (OneOf errors) m a }
   deriving newtype (Functor, Applicative, Monad)
 
+runUltraExceptT :: UltraExceptT m errors a -> m (Either (OneOf errors) a)
+runUltraExceptT = runExceptT . getUltraExceptT
+
 liftToUltraExceptT :: Monad m => m a -> UltraExceptT m errors a
 liftToUltraExceptT
   = UltraExceptT . lift
 
+-- | This function allows unwrapping UltraExceptT without any errors
+-- if the error list is empty
 runUltraExceptTWithoutErrors :: Monad m => UltraExceptT m '[] a -> m a
 runUltraExceptTWithoutErrors UltraExceptT{..} = do
   result <- runExceptT getUltraExceptT
@@ -208,7 +215,7 @@ runUltraExceptTWithoutErrors UltraExceptT{..} = do
     Right rightResult ->
       pure rightResult
     Left error ->
-      case error of
+      case error of -- an empty case statement because there are no values of OneOf '[]
 
 instance Monad m => MonadUltraError (UltraExceptT m) where
   throwUltraError error
@@ -216,7 +223,7 @@ instance Monad m => MonadUltraError (UltraExceptT m) where
 
   catchUltraErrorMethod
     :: forall error errors a
-     . UltraExceptT m (error:errors) a -- UltraExceptT (ExceptT (thing :: m (Either)))
+     . UltraExceptT m (error:errors) a
     -> (error -> UltraExceptT m errors a)
     -> UltraExceptT m errors a
   catchUltraErrorMethod (UltraExceptT failableAction) handleError = do

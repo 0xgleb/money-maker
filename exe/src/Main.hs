@@ -2,6 +2,8 @@ module Main where
 
 import Contract
 
+-- import qualified MoneyMaker.Error                   as Error
+import qualified MoneyMaker.Eventful                as Eventful
 import qualified MoneyMaker.Coinbase.SDK.Websockets as Coinbase
 
 import Protolude
@@ -47,8 +49,11 @@ main = do
             ProdMode -> "ws-feed.pro.coinbase.com"
             TestMode -> "ws-feed-public.sandbox.pro.coinbase.com"
 
-      Wuss.runSecureClient websocketHost 443 "/" $ Coinbase.websocketsClient $ \newPriceData ->
-        STM.atomically $ STM.writeTQueue priceDataQueue $ toContractualPriceData newPriceData
+      Wuss.runSecureClient websocketHost 443 "/" $ Coinbase.websocketsClient $ \newPriceData -> do
+        (priceData, _) <-
+          Eventful.runInMemoryEventStoreTWithoutErrors [] $ toContractualPriceData newPriceData
+
+        STM.atomically $ STM.writeTQueue priceDataQueue priceData
 
     -- placeholder for the function that will take a new prediction from the
     -- prediction process and evaluate whether it needs to make any changes

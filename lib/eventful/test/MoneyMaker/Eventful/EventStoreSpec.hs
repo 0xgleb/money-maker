@@ -15,7 +15,7 @@ spec = do
   describe "getAggregate" $ do
     it "correctly picks events and computes the aggregate" $ do
       let result
-            = fmap fst $ getUltraEither
+            = fmap fst $ runIdentity $ runUltraExceptT
             $ flip runStateT exampleStorableEvents $ runInMemoryEventStore
             $ getAggregate @UserEvent @[NoEventsFoundError, UserEventError, CouldntDecodeEventError]
             $ Id [uuid|123e4666-e89b-12d3-a456-666614174000|]

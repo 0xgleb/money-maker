@@ -71,6 +71,7 @@ executables:
     - -O2
     dependencies:
     - money-maker-coinbase-sdk
+    - money-maker-error
     - money-maker-eventful
     - base
     - aeson

@@ -7,7 +7,8 @@ module MoneyMaker.Eventful.EventStore
   , CouldntDecodeEventError(..)
 
   , StorableEvent(..)
-  , InMemoryEventStore(..)
+  , InMemoryEventStoreT(..)
+  , runInMemoryEventStoreTWithoutErrors
   )
   where
 
@@ -78,47 +79,67 @@ class MonadUltraError m => MonadEventStore (m :: [Type] -> Type -> Type) where
 
 data StorableEvent
   = StorableEvent
-      { id      :: UUID.UUID
-      , payload :: Aeson.Value -- ^ JSON encoded event
+      { id      :: !UUID.UUID
+      , payload :: !Aeson.Value -- ^ JSON encoded event
       }
 
 -- | Non-persisted in-memory event store for testing
-newtype InMemoryEventStore (errors :: [Type]) (a :: Type)
-  = InMemoryEventStore
-      { runInMemoryEventStore :: StateT [StorableEvent] (UltraEither errors) a }
+newtype InMemoryEventStoreT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
+  = InMemoryEventStoreT
+      { runInMemoryEventStore :: StateT [StorableEvent] (UltraExceptT m errors) a }
   deriving newtype (Functor, Applicative, Monad, MonadState [StorableEvent])
 
+runInMemoryEventStoreTWithoutErrors
+  :: Monad m
+  => [StorableEvent]
+  -> InMemoryEventStoreT m '[] a
+  -> m (a, [StorableEvent])
+runInMemoryEventStoreTWithoutErrors initialEvents (InMemoryEventStoreT action)
+  = runUltraExceptTWithoutErrors $ runStateT action initialEvents
 
-instance MonadUltraError InMemoryEventStore where
+instance Monad m => MonadUltraError (InMemoryEventStoreT m) where
   throwUltraError error
-    = InMemoryEventStore $ lift $ throwUltraError error
+    = InMemoryEventStoreT $ lift $ throwUltraError error
 
-  catchUltraErrorMethod (InMemoryEventStore action) handleError = do
-    UltraEither result <- runStateT action <$> get
+  catchUltraErrorMethod
+    :: forall error errors a
+     . InMemoryEventStoreT m (error:errors) a
+    -> (error -> InMemoryEventStoreT m errors a)
+    -> InMemoryEventStoreT m errors a
+  catchUltraErrorMethod (InMemoryEventStoreT action) handleError = do
+    currentState <- get
+    (result :: Either (OneOf (error:errors)) (a, [StorableEvent])) <-
+      InMemoryEventStoreT -- InMemoryEventStoreT m errors (Either (OneOf (error:errors)) (a, [StorableEvent]))
+        $ lift -- StateT [StorableEvent] (UltraExceptT m errors) (Either (OneOf (error:errors)) (a, [StorableEvent]))
+        $ liftToUltraExceptT -- UltraExceptT m errors (Either (OneOf (error:errors)) (a, [StorableEvent]))
+        $ runUltraExceptT -- m (Either (OneOf (error:errors)) (a, [StorableEvent]))
+        $ runStateT action currentState -- UltraExceptT m (error:errors) (a, [StorableEvent])
+
     case result of
       Right (val, _) ->
-        InMemoryEventStore $ pure val
+        InMemoryEventStoreT $ pure val
 
       Left err ->
         case getOneOf err of
           Right error -> handleError error
           Left otherErr ->
-            InMemoryEventStore $ lift $ UltraEither $ Left otherErr
+            InMemoryEventStoreT $ lift $ UltraExceptT $ ExceptT $ pure $ Left otherErr
 
 
-instance MonadEventStore InMemoryEventStore where
+instance Monad m => MonadEventStore (InMemoryEventStoreT m) where
   getAggregateWithProxy = getAggregateWithProxyInMemory
   applyCommandWithProxy = applyCommandWithProxyInMemory
 
 getAggregateWithProxyInMemory
   :: ( NoEventsFoundError `Elem` errors
-      , EventError event `Elem` errors
-      , CouldntDecodeEventError  `Elem` errors
-      , Event event
-      )
+     , EventError event `Elem` errors
+     , CouldntDecodeEventError  `Elem` errors
+     , Event event
+     , Monad m
+     )
   => Proxy event
   -> Id (AggregateIdTag event)
-  -> InMemoryEventStore errors (EventAggregate event)
+  -> InMemoryEventStoreT m errors (EventAggregate event)
 
 getAggregateWithProxyInMemory (_ :: Proxy event) (Id uuid) = do
   allEvents <- get
@@ -134,17 +155,18 @@ getAggregateWithProxyInMemory (_ :: Proxy event) (Id uuid) = do
       computeCurrentState @event events
 
 applyCommandWithProxyInMemory
-  :: forall command event errors
+  :: forall command event errors m
    . ( Command command event
      , CouldntDecodeEventError `Elem` errors
      , CommandError command `Elem` errors
      , EventError event `Elem` errors
      , Event event
+     , Monad m
      )
   => Proxy event
   -> Id (AggregateIdTag event)
   -> command
-  -> InMemoryEventStore errors (EventAggregate event)
+  -> InMemoryEventStoreT m errors (EventAggregate event)
 
 applyCommandWithProxyInMemory eventProxy id command = do
   aggregate <-
