@@ -1,30 +1,50 @@
 {-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE StrictData #-}
+{-# LANGUAGE StrictData     #-}
 
 module MoneyMaker.Eventful.EventSpec
   ( spec
-  , UserEvent(..)
+
   , Role(..)
   , User(..)
+  , UserEvent(..)
   , UserEventError(..)
   , exampleUserEvents
   , exampleUser
+
+  , UserCommand(..)
+  , UserAlreadyExistsError(..)
+  , UserDoesntExist(..)
   )
   where
 
 import MoneyMaker.Error
 import MoneyMaker.Eventful.Event
+import MoneyMaker.Eventful.Command
 
-import Protolude
-import Test.Hspec
 import qualified Data.Aeson as Aeson
+import           Protolude
+import           Test.Hspec
 
 spec :: Spec
 spec = do
   describe "computeCurrentState" $ do
     it "correctly computes example user events" $ do
-      getUltraEither (computeCurrentState @_ @[NoEventsFoundError, UserEventError] exampleUserEvents)
-        `shouldBe` (Right exampleUser)
+      let currentState
+            = computeCurrentState @_ @[NoEventsFoundError, UserEventError] exampleUserEvents
+
+      getUltraEither currentState `shouldBe` (Right exampleUser)
+
+exampleUserEvents :: [UserEvent]
+exampleUserEvents =
+  [ UserCreated
+  , NameUpdated "Creator"
+  , RoleSet Genius
+  , NameUpdated "Gleb"
+  , RoleSet Engineer
+  ]
+
+exampleUser :: User
+exampleUser = User (Just "Gleb") (Just Engineer)
 
 data UserEvent
   = UserCreated
@@ -54,7 +74,7 @@ data UserEventError
   deriving stock (Eq, Show)
 
 instance Eventful UserEvent where
-  type EventName      UserEvent = "user-event"
+  type EventName      UserEvent = "user"
   type EventAggregate UserEvent = User
   type EventError     UserEvent = UserEventError
 
@@ -78,14 +98,60 @@ instance Eventful UserEvent where
     RoleSet newRole ->
       pure $ user { role = Just newRole }
 
-exampleUserEvents :: [UserEvent]
-exampleUserEvents =
-  [ UserCreated
-  , NameUpdated "Creator"
-  , RoleSet Genius
-  , NameUpdated "Gleb"
-  , RoleSet Engineer
-  ]
+data UserCommand
+  = CreateUser
+  | SetName Text
+  | SetRole Role
 
-exampleUser :: User
-exampleUser = User (Just "Gleb") (Just Engineer)
+data UserAlreadyExistsError
+  = UserAlreadyExistsError
+      { message :: !Text
+      , userId  :: !(Id "user")
+      }
+
+data UserDoesntExist
+  = UserDoesntExist
+      { message :: !Text
+      , userId  :: !(Id "user")
+      }
+
+instance Command UserCommand UserEvent where
+  type CommandErrors UserCommand =
+    '[ UserAlreadyExistsError
+     , UserDoesntExist
+     ]
+
+  handleCommand
+    :: ( MonadUltraError m
+       , CommandErrors UserCommand `Elems` errors
+       )
+    => Id "user"
+    -> Maybe User
+    -> UserCommand
+    -> m errors (NonEmpty UserEvent)
+
+  handleCommand userId maybeUser userCommand
+    = case (maybeUser, userCommand) of
+        (Just _, CreateUser) ->
+          throwUltraError UserAlreadyExistsError
+            { message = "Received CreateUser command but this user already exists"
+            , userId
+            }
+        (Nothing, CreateUser) ->
+          pure $ pure UserCreated
+
+        (Nothing, SetName _) ->
+          throwUltraError UserDoesntExist
+            { message = "Received SetName command but this user doesn't exists"
+            , userId
+            }
+        (Just _, SetName name) ->
+          pure $ pure $ NameUpdated name
+
+        (Nothing, SetRole _) ->
+          throwUltraError UserDoesntExist
+            { message = "Received RoleSet command but this user doesn't exists"
+            , userId
+            }
+        (Just _, SetRole role) ->
+          pure $ pure $ RoleSet role

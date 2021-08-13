@@ -7,6 +7,7 @@ module MoneyMaker.Error
   ( MonadUltraError(..)
   , catchUltraError
   , type Elems
+  , type (++)
   , Elem
   , OneOf(..)
   , getOneOf
@@ -149,6 +150,11 @@ type family Elems (monoErrors :: [Type]) (polyErrors :: [Type]) :: Constraint wh
     ( e `Elem` errors -- ensure the current error is in the errors list
     , es `Elems` errors -- ensure the same for the following elements
     )
+
+type family (++) (listA :: [a]) (listB :: [a]) :: [a] where
+  '[] ++ listB = listB
+
+  (x : xs) ++ listB = x : (xs ++ listB)
 
 -- | We need @Elem@ for two reasons: one is to assert that an error is in the
 -- error list and the other is for creating a value of type @OneOf xs@ from

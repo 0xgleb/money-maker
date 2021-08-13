@@ -8,19 +8,14 @@ import MoneyMaker.Eventful.Event
 
 import Protolude
 
-class
-  ( Eventful event
-  -- , KnownSymbol (CommandName command)
-  ) => Command command event | command -> event
-  where
-    -- type family CommandName command :: Symbol
+class Eventful event => Command command event | command -> event where
+  type family CommandErrors command :: [Type]
 
-    type family CommandError command :: Type
-
-    handleCommand
-      :: ( MonadUltraError m
-        , CommandError command `Elem` errors
-        )
-      => Maybe (EventAggregate event)
-      -> command
-      -> m errors (NonEmpty event)
+  handleCommand
+    :: ( MonadUltraError m
+       , CommandErrors command `Elems` errors
+       )
+    => Id (EventName event)
+    -> Maybe (EventAggregate event)
+    -> command
+    -> m errors (NonEmpty event)

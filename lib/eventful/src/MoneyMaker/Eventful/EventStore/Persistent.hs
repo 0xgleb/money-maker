@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module MoneyMaker.Eventful.Persistence
+module MoneyMaker.Eventful.EventStore.Persistent
   ( EventId
   , Event(..)
   , migrateAll
@@ -13,34 +13,48 @@ module MoneyMaker.Eventful.Persistence
 import MoneyMaker.Error
 import MoneyMaker.Eventful.Command
 import MoneyMaker.Eventful.Event
-import MoneyMaker.Eventful.EventStore
+import MoneyMaker.Eventful.EventStore.Interface
 
 import Protolude
 
 import qualified Data.Aeson           as Aeson
+import qualified Data.ByteString.Lazy as BSL
 import qualified Data.UUID            as UUID
 import           Database.Persist     ((==.))
 import qualified Database.Persist     as Persist
 import qualified Database.Persist.Sql as Persist
 import qualified Database.Persist.TH  as Persist
-import qualified Data.ByteString.Lazy as BSL
 
-Persist.share [Persist.mkPersist Persist.sqlSettings, Persist.mkMigrate "migrateAll"] [Persist.persistLowerCase|
+Persist.share
+  [Persist.mkPersist Persist.sqlSettings, Persist.mkMigrate "migrateAll"]
+  [Persist.persistLowerCase|
 Event
     type Text
     aggregate_id Text
     payload ByteString
     deriving Show
 |]
--- data Event = Event
---   { eventType         :: !Text
---   , eventAggregate_id :: !Text
---   , eventPayload      :: !Text
---   }
+{-
+
+The above Template Haskell block generates a type that looks something like this
+
+data Event = Event
+  { eventType         :: !Text
+  , eventAggregate_id :: !Text
+  , eventPayload      :: !Text
+  }
+
+As well as other types, functions, and instances that allow this type to be
+converted to and from generic database types.
+
+-}
 
 
 newtype SqlEventStoreT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
-  = SqlEventStoreT { runSqlEventStoreT :: ReaderT Persist.ConnectionPool (UltraExceptT m errors) a }
+  = SqlEventStoreT
+      { runSqlEventStoreT
+          :: ReaderT Persist.ConnectionPool (UltraExceptT m errors) a
+      }
   deriving newtype (Functor, Applicative, Monad, MonadReader Persist.ConnectionPool, MonadIO)
 
 instance Monad m => MonadUltraError (SqlEventStoreT m) where
@@ -105,7 +119,7 @@ applyCommandWithSql
   :: forall command event errors m
    . ( Command command event
      , CouldntDecodeEventError `Elem` errors
-     , CommandError command `Elem` errors
+     , CommandErrors command `Elems` errors
      , EventError event `Elem` errors
      , Eventful event
      , MonadIO m
@@ -123,7 +137,8 @@ applyCommandWithSql eventProxy aggregateId command = do
       (const $ pure Nothing)
 
   -- Use the command's handleCommand method to get what events should be added
-  (headEvent :| tailEvents) <- handleCommand maybeAggregate command
+  (headEvent :| tailEvents) <-
+    handleCommand aggregateId maybeAggregate command
 
   let allEvents = headEvent : tailEvents
 
@@ -142,6 +157,7 @@ applyCommandWithSql eventProxy aggregateId command = do
 
   liftIO $ flip Persist.runSqlPool connectionPool $ do
     -- Insert new events into the database
+    -- TODO: ensure events go in the right order
     void $ Persist.insertMany $ allEvents <&> \event ->
       Event
         { eventType
