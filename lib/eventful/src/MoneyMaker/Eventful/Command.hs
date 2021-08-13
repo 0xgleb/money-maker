@@ -8,7 +8,7 @@ import MoneyMaker.Eventful.Event
 
 import Protolude
 
-class Event event => Command command event | command -> event where
+class Eventful event => Command command event | command -> event where
   type family CommandError command :: Type
 
   handleCommand

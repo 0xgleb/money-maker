@@ -53,7 +53,7 @@ data UserEventError
   | CantCreateExistingUser
   deriving stock (Eq, Show)
 
-instance Event UserEvent where
+instance Eventful UserEvent where
   type AggregateIdTag UserEvent = "User"
   type EventAggregate UserEvent = User
   type EventError     UserEvent = UserEventError

@@ -1,5 +1,5 @@
 module MoneyMaker.Eventful.Event
-  ( Event(..)
+  ( Eventful(..)
   , NoEventsFoundError(..)
   , computeCurrentState
   , Id(..)
@@ -9,6 +9,7 @@ module MoneyMaker.Eventful.Event
 import MoneyMaker.Error
 
 import Protolude
+
 import qualified Data.Aeson as Aeson
 import qualified Data.UUID  as UUID
 
@@ -20,7 +21,7 @@ import qualified Data.UUID  as UUID
 newtype Id (tag :: k)
   = Id { getId :: UUID.UUID }
 
-class (Aeson.ToJSON event, Aeson.FromJSON event) => Event event where
+class (Aeson.ToJSON event, Aeson.FromJSON event) => Eventful event where
   type family AggregateIdTag event :: tag
   type family EventAggregate event :: Type
   type family EventError     event :: Type
@@ -39,7 +40,7 @@ data NoEventsFoundError
 
 computeCurrentState
   :: forall event errors m
-   . ( Event event
+   . ( Eventful event
      , MonadUltraError m
      , NoEventsFoundError `Elem` errors
      , EventError event `Elem` errors

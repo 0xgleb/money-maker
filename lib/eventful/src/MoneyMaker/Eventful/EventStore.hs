@@ -24,7 +24,7 @@ import qualified Prelude
 
 getAggregate
   :: forall event errors m
-   . ( Event event
+   . ( Eventful event
      , MonadEventStore m
      , MonadUltraError m
      , NoEventsFoundError `Elem` errors
@@ -43,7 +43,7 @@ applyCommand
      , CouldntDecodeEventError `Elem` errors
      , CommandError command `Elem` errors
      , EventError event `Elem` errors
-     , Event event
+     , Eventful event
      )
   => Id (AggregateIdTag event)
   -> command
@@ -58,7 +58,7 @@ class MonadUltraError m => MonadEventStore (m :: [Type] -> Type -> Type) where
     :: ( NoEventsFoundError `Elem` errors
        , EventError event `Elem` errors
        , CouldntDecodeEventError `Elem` errors
-       , Event event
+       , Eventful event
        )
     => Proxy event
     -> Id (AggregateIdTag event)
@@ -70,7 +70,7 @@ class MonadUltraError m => MonadEventStore (m :: [Type] -> Type -> Type) where
        , CouldntDecodeEventError `Elem` errors
        , CommandError command `Elem` errors
        , EventError event `Elem` errors
-       , Event event
+       , Eventful event
        )
     => Proxy event
     -> Id (AggregateIdTag event)
@@ -134,7 +134,7 @@ getAggregateWithProxyInMemory
   :: ( NoEventsFoundError `Elem` errors
      , EventError event `Elem` errors
      , CouldntDecodeEventError  `Elem` errors
-     , Event event
+     , Eventful event
      , Monad m
      )
   => Proxy event
@@ -161,7 +161,7 @@ applyCommandWithProxyInMemory
      , CouldntDecodeEventError `Elem` errors
      , CommandError command `Elem` errors
      , EventError event `Elem` errors
-     , Event event
+     , Eventful event
      , Monad m
      )
   => Proxy event
