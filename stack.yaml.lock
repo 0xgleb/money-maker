@@ -3,17 +3,10 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages:
-- completed:
-    hackage: hspec-expectations-json-1.0.0.1@sha256:2bde687039bb124834a83c5e0cbc5e70f390b71b3b2238626ebae625f3e8be58,3513
-    pantry-tree:
-      size: 616
-      sha256: bb601c5cd8cb1aa655ca18bbf64faf0420dbcdb9b9c10385dc7f1b0245c50f6f
-  original:
-    hackage: hspec-expectations-json-1.0.0.1@sha256:2bde687039bb124834a83c5e0cbc5e70f390b71b3b2238626ebae625f3e8be58,3513
+packages: []
 snapshots:
 - completed:
-    size: 533053
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/16/29.yaml
-    sha256: eb8ccc595466edefb9a679f19aec2e283d12f4c6ea5eefded1ebe8bd157d77d1
-  original: lts-16.29
+    size: 585817
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/18/5.yaml
+    sha256: 22d24d0dacad9c1450b9a174c28d203f9bb482a2a8da9710a2f2a9f4afee2887
+  original: lts-18.5

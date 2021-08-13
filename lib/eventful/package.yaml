@@ -5,6 +5,7 @@ license:             BSD3
 dependencies:
 - base
 - aeson
+- persistent
 - protolude
 - template-haskell
 - uuid

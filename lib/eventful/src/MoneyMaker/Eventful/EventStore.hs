@@ -18,9 +18,9 @@ import MoneyMaker.Eventful.Event
 
 import Protolude
 
-import qualified Prelude
 import qualified Data.Aeson as Aeson
 import qualified Data.UUID  as UUID
+import qualified Prelude
 
 getAggregate
   :: forall event errors m
@@ -150,8 +150,9 @@ getAggregateWithProxyInMemory (_ :: Proxy event) (Id uuid) = do
             <$> filter ((== uuid) . id) allEvents
 
   case relevantEvents of
-    Aeson.Error err -> throwUltraError $ CouldntDecodeEventError err
-    Aeson.Success events -> do
+    Aeson.Error err ->
+      throwUltraError $ CouldntDecodeEventError err
+    Aeson.Success events ->
       computeCurrentState @event events
 
 applyCommandWithProxyInMemory
