@@ -98,8 +98,7 @@ runInMemoryEventStoreTWithoutErrors initialEvents (InMemoryEventStoreT action)
   = runUltraExceptTWithoutErrors $ runStateT action initialEvents
 
 instance Monad m => MonadUltraError (InMemoryEventStoreT m) where
-  throwUltraError error
-    = InMemoryEventStoreT $ lift $ throwUltraError error
+  throwUltraError = InMemoryEventStoreT . lift . throwUltraError
 
   catchUltraErrorMethod
     :: forall error errors a
@@ -108,7 +107,7 @@ instance Monad m => MonadUltraError (InMemoryEventStoreT m) where
     -> InMemoryEventStoreT m errors a
   catchUltraErrorMethod (InMemoryEventStoreT action) handleError = do
     currentState <- get
-    (result :: Either (OneOf (error:errors)) (a, [StorableEvent])) <-
+    result :: Either (OneOf (error:errors)) (a, [StorableEvent]) <-
       InMemoryEventStoreT -- InMemoryEventStoreT m errors (Either (OneOf (error:errors)) (a, [StorableEvent]))
         $ lift -- StateT [StorableEvent] (UltraExceptT m errors) (Either (OneOf (error:errors)) (a, [StorableEvent]))
         $ liftToUltraExceptT -- UltraExceptT m errors (Either (OneOf (error:errors)) (a, [StorableEvent]))
