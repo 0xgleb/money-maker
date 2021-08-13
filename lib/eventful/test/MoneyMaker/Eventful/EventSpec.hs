@@ -54,7 +54,7 @@ data UserEventError
   deriving stock (Eq, Show)
 
 instance Eventful UserEvent where
-  type AggregateIdTag UserEvent = "User"
+  type EventName      UserEvent = "user-event"
   type EventAggregate UserEvent = User
   type EventError     UserEvent = UserEventError
 

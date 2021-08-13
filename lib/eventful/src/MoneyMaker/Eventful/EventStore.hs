@@ -31,7 +31,7 @@ getAggregate
      , EventError event `Elem` errors
      , CouldntDecodeEventError  `Elem` errors
      )
-  => Id (AggregateIdTag event)
+  => Id (EventName event)
   -> m errors (EventAggregate event)
 getAggregate = getAggregateWithProxy $ Proxy @event
 
@@ -45,7 +45,7 @@ applyCommand
      , EventError event `Elem` errors
      , Eventful event
      )
-  => Id (AggregateIdTag event)
+  => Id (EventName event)
   -> command
   -> m errors (EventAggregate event)
 applyCommand = applyCommandWithProxy $ Proxy @event
@@ -61,7 +61,7 @@ class MonadUltraError m => MonadEventStore (m :: [Type] -> Type -> Type) where
        , Eventful event
        )
     => Proxy event
-    -> Id (AggregateIdTag event)
+    -> Id (EventName event)
     -> m errors (EventAggregate event)
 
   applyCommandWithProxy
@@ -73,7 +73,7 @@ class MonadUltraError m => MonadEventStore (m :: [Type] -> Type -> Type) where
        , Eventful event
        )
     => Proxy event
-    -> Id (AggregateIdTag event)
+    -> Id (EventName event)
     -> command
     -> m errors (EventAggregate event)
 
@@ -137,7 +137,7 @@ getAggregateWithProxyInMemory
      , Monad m
      )
   => Proxy event
-  -> Id (AggregateIdTag event)
+  -> Id (EventName event)
   -> InMemoryEventStoreT m errors (EventAggregate event)
 
 getAggregateWithProxyInMemory (_ :: Proxy event) (Id uuid) = do
@@ -154,6 +154,7 @@ getAggregateWithProxyInMemory (_ :: Proxy event) (Id uuid) = do
     Aeson.Success events ->
       computeCurrentState @event events
 
+
 applyCommandWithProxyInMemory
   :: forall command event errors m
    . ( Command command event
@@ -164,14 +165,36 @@ applyCommandWithProxyInMemory
      , Monad m
      )
   => Proxy event
-  -> Id (AggregateIdTag event)
+  -> Id (EventName event)
   -> command
   -> InMemoryEventStoreT m errors (EventAggregate event)
 
-applyCommandWithProxyInMemory eventProxy id command = do
-  aggregate <-
+applyCommandWithProxyInMemory eventProxy aggregateId command = do
+  -- Get the current aggregate if it exists
+  maybeAggregate :: Maybe (EventAggregate event) <-
     catchUltraError @NoEventsFoundError
-      (Just <$> getAggregateWithProxyInMemory eventProxy id)
+      (Just <$> getAggregateWithProxyInMemory eventProxy aggregateId)
       (const $ pure Nothing)
 
-  handleCommand aggregate command
+  -- Use the command's handleCommand method to get what events should be added
+  (headEvent :| tailEvents) <- handleCommand maybeAggregate command
+
+  let allEvents = headEvent : tailEvents
+
+  -- Get a non-maybe aggregate
+  nextAggregate <-
+    applyEvent maybeAggregate headEvent
+
+  -- Apply the rest of the new events to the aggregate
+  aggregate <-
+    foldM -- :: (b -> a -> m b) -> b -> t a -> m b
+      (\agg nextEvent -> applyEvent (Just agg) nextEvent)
+      nextAggregate
+      tailEvents
+
+  -- Prepare to store the new events in the right format
+  let newStorableEvents :: [StorableEvent]
+        = StorableEvent (getId aggregateId) . Aeson.toJSON <$> allEvents
+
+  -- Update the state with the new events and return the new aggregate
+  state $ (aggregate,) . (<> newStorableEvents)

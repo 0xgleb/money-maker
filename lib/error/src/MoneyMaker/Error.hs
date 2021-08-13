@@ -194,7 +194,7 @@ instance MonadUltraError UltraEither where
         Left err  -> UltraEither $ Left err
         Right err -> handleError err
 
--- | Newtype around @Either@ that
+-- | ExceptT parametrised by errors it can have
 newtype UltraExceptT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
   = UltraExceptT { getUltraExceptT :: ExceptT (OneOf errors) m a }
   deriving newtype (Functor, Applicative, Monad, MonadIO)

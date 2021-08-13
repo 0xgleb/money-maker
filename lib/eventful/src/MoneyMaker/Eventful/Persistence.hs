@@ -52,9 +52,10 @@ instance Monad m => MonadUltraError (SqlEventStoreT m) where
     -> (error -> SqlEventStoreT m errors a)
     -> SqlEventStoreT m errors a
   catchUltraErrorMethod (SqlEventStoreT action) handleError = do
-    conn <- ask
+    connectionPool <- ask
     result :: Either (OneOf (error:errors)) a <-
-      SqlEventStoreT $ lift $ liftToUltraExceptT $ runUltraExceptT $ runReaderT action conn
+      SqlEventStoreT $ lift $ liftToUltraExceptT
+        $ runUltraExceptT $ runReaderT action connectionPool
       -- see full type breakdown in the in-memory instance
 
     case result of
@@ -68,9 +69,9 @@ instance Monad m => MonadUltraError (SqlEventStoreT m) where
             SqlEventStoreT $ lift $ UltraExceptT $ ExceptT $ pure $ Left otherErr
 
 
--- instance Monad m => MonadEventStore (SqlEventStoreT m) where
---   getAggregateWithProxy = getAggregateWithSql
---   applyCommandWithProxy = applyCommandWithSql
+instance MonadIO m => MonadEventStore (SqlEventStoreT m) where
+  getAggregateWithProxy = getAggregateWithSql
+  applyCommandWithProxy = applyCommandWithSql
 
 getAggregateWithSql
   :: ( NoEventsFoundError `Elem` errors
@@ -80,13 +81,13 @@ getAggregateWithSql
      , MonadIO m
      )
   => Proxy event
-  -> Id (AggregateIdTag event)
+  -> Id (EventName event)
   -> SqlEventStoreT m errors (EventAggregate event)
 
 getAggregateWithSql (_ :: Proxy event) (Id uuid) = do
-  conn <- ask
+  connectionPool <- ask
 
-  decodedEvents <- liftIO $ flip Persist.runSqlPool conn $ do
+  decodedEvents <- liftIO $ flip Persist.runSqlPool connectionPool $ do
     rawEvents <-
       fmap Persist.entityVal
         <$> Persist.selectList [EventAggregate_id ==. UUID.toText uuid] []
@@ -98,3 +99,59 @@ getAggregateWithSql (_ :: Proxy event) (Id uuid) = do
       throwUltraError $ CouldntDecodeEventError "Couldn't decode smth, idk what"
     Just events ->
       computeCurrentState @event events
+
+
+applyCommandWithSql
+  :: forall command event errors m
+   . ( Command command event
+     , CouldntDecodeEventError `Elem` errors
+     , CommandError command `Elem` errors
+     , EventError event `Elem` errors
+     , Eventful event
+     , MonadIO m
+     )
+  => Proxy event
+  -> Id (EventName event)
+  -> command
+  -> SqlEventStoreT m errors (EventAggregate event)
+
+applyCommandWithSql eventProxy aggregateId command = do
+  -- Get the current aggregate if it exists
+  maybeAggregate :: Maybe (EventAggregate event) <-
+    catchUltraError @NoEventsFoundError
+      (Just <$> getAggregateWithSql eventProxy aggregateId)
+      (const $ pure Nothing)
+
+  -- Use the command's handleCommand method to get what events should be added
+  (headEvent :| tailEvents) <- handleCommand maybeAggregate command
+
+  let allEvents = headEvent : tailEvents
+
+  -- Get a non-maybe aggregate
+  nextAggregate <-
+    applyEvent maybeAggregate headEvent
+
+  -- Apply the rest of the new events to the aggregate
+  aggregate <-
+    foldM -- :: (b -> a -> m b) -> b -> t a -> m b
+      (\agg nextEvent -> applyEvent (Just agg) nextEvent)
+      nextAggregate
+      tailEvents
+
+  connectionPool <- ask
+
+  liftIO $ flip Persist.runSqlPool connectionPool $ do
+    -- Insert new events into the database
+    void $ Persist.insertMany $ allEvents <&> \event ->
+      Event
+        { eventType
+            = toS $ symbolVal $ Proxy @(EventName event)
+
+        , eventAggregate_id
+            = UUID.toText $ getId aggregateId
+
+        , eventPayload
+            = BSL.toStrict $ Aeson.encode event
+        }
+
+    pure aggregate

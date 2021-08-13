@@ -18,21 +18,26 @@ import qualified Data.UUID  as UUID
 -- the compiler will make sure that you don't mess up and use one in place
 -- of another. (tag :: k) part allows you to tag it not only with types but
 -- with type-level values of any "kind", for example, type-level strings
-newtype Id (tag :: k)
+newtype Id (tag :: Symbol)
   = Id { getId :: UUID.UUID }
 
-class (Aeson.ToJSON event, Aeson.FromJSON event) => Eventful event where
-  type family AggregateIdTag event :: tag
-  type family EventAggregate event :: Type
-  type family EventError     event :: Type
+class
+  ( Aeson.ToJSON event
+  , Aeson.FromJSON event
+  , KnownSymbol (EventName event)
+  ) => Eventful event
+  where
+    type family EventName event      :: Symbol
+    type family EventAggregate event :: Type
+    type family EventError     event :: Type
 
-  applyEvent
-    :: ( MonadUltraError m
-       , EventError event `Elem` errors
-       )
-    => Maybe (EventAggregate event)
-    -> event
-    -> m errors (EventAggregate event)
+    applyEvent
+      :: ( MonadUltraError m
+         , EventError event `Elem` errors
+         )
+      => Maybe (EventAggregate event)
+      -> event
+      -> m errors (EventAggregate event)
 
 data NoEventsFoundError
   = NoEventsFoundError

@@ -3,8 +3,8 @@ module Main where
 import Contract
 
 -- import qualified MoneyMaker.Error                   as Error
-import qualified MoneyMaker.Eventful                as Eventful
 import qualified MoneyMaker.Coinbase.SDK.Websockets as Coinbase
+import qualified MoneyMaker.Eventful                as Eventful
 
 import Protolude
 
@@ -12,6 +12,7 @@ import qualified Control.Concurrent.STM as STM
 import qualified Data.Aeson             as Aeson
 import qualified Data.Text.Lazy.IO      as Txt.LIO
 import qualified Paths_exe              as Path
+import qualified Prelude
 import qualified System.IO              as IO
 import qualified System.Process         as Proc
 import qualified Wuss
@@ -26,7 +27,7 @@ main = do
   let mode = TestMode
 
   when (mode == ProdMode)
-    $ putStrLn @Text "WARNING: RUNNING IN PROD MODE!"
+    $ Prelude.error "Prod is NOT READY!" -- putStrLn @Text "WARNING: RUNNING IN PROD MODE!"
 
   IO.hSetBuffering IO.stdin IO.NoBuffering -- we only need this for testing with getLine
   IO.hSetBuffering IO.stdout IO.NoBuffering -- we only need this for testing with getLine

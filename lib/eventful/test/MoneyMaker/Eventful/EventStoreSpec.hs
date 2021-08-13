@@ -12,6 +12,7 @@ import           Test.Hspec
 
 spec :: Spec
 spec = do
+  -- TODO: describe "applyCommand"
   describe "getAggregate" $ do
     it "correctly picks events and computes the aggregate" $ do
       let result
