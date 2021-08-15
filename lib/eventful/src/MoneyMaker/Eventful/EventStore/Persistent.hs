@@ -7,6 +7,7 @@ module MoneyMaker.Eventful.EventStore.Persistent
   , migrateAll
 
   , SqlEventStoreT(..)
+  , runSqlEventStoreT
   )
   where
 
@@ -52,10 +53,18 @@ converted to and from generic database types.
 
 newtype SqlEventStoreT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
   = SqlEventStoreT
-      { runSqlEventStoreT
+      { getSqlEventStoreT
           :: ReaderT Persist.ConnectionPool (UltraExceptT m errors) a
       }
   deriving newtype (Functor, Applicative, Monad, MonadReader Persist.ConnectionPool, MonadIO)
+
+runSqlEventStoreT
+  :: Persist.ConnectionPool
+  -> SqlEventStoreT m errors a
+  -> m (Either (OneOf errors) a)
+
+runSqlEventStoreT connectionPool (SqlEventStoreT action)
+  = runUltraExceptT $ runReaderT action connectionPool
 
 instance Monad m => MonadUltraError (SqlEventStoreT m) where
   throwUltraError = SqlEventStoreT . lift . throwUltraError

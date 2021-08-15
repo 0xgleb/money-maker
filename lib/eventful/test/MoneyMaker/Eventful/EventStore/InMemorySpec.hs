@@ -11,15 +11,15 @@ import MoneyMaker.Eventful.EventStore.Helpers
 import MoneyMaker.Error
 import MoneyMaker.Eventful
 
+import Protolude
+
 import qualified Data.Aeson as Aeson
-import           Protolude
 import           Test.Hspec
 
 spec :: Spec
 spec = do
-  -- TODO: describe "applyCommand"
-  describe "getAggregate" $ do
-    it "correctly picks events and computes the aggregate" $ do
+  describe "applyCommand and getAggregate" $ do
+    it "executing testEventStoreProcedure results in the expected user aggregate" $ do
       let result :: Either (OneOf TestEventStoreProcedureErrors) User
             = fmap fst . runIdentity . runUltraExceptT
             . flip runStateT exampleStorableEvents . runInMemoryEventStore

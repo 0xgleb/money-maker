@@ -78,7 +78,10 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - money-maker-eventful
-    - hspec
     - QuickCheck
+    - hspec
+    - monad-logger
+    - persistent-sqlite
+    - resource-pool
     # - generic-random
     # - quickcheck-text

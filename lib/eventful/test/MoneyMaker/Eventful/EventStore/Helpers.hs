@@ -19,7 +19,8 @@ type TestEventStoreProcedureErrors
     ++ CommandErrors UserCommand
 
 testEventStoreProcedure
-  :: ( MonadEventStore m
+  :: forall errors m
+   . ( MonadEventStore m
      , TestEventStoreProcedureErrors `Elems` errors
      )
   => m errors User
