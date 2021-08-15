@@ -18,7 +18,7 @@ import qualified Database.Persist.Sqlite as Sqlite
 
 spec :: Spec
 spec = do
-  describe "applyCommand and getAggregate" $ do
+  describe "MonadEventStore SqlEventStoreT" $ do
     it "executing testEventStoreProcedure results in the expected user aggregate" $ do
       result <- Logger.runNoLoggingT $ Sqlite.withSqlitePool ":memory:" 1 $ \connectionPool -> do
         Pool.withResource connectionPool

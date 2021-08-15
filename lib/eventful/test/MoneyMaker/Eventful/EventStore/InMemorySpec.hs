@@ -18,12 +18,12 @@ import           Test.Hspec
 
 spec :: Spec
 spec = do
-  describe "applyCommand and getAggregate" $ do
+  describe "MonadEventStore InMemoryEventStoreT" $ do
     it "executing testEventStoreProcedure results in the expected user aggregate" $ do
       let result :: Either (OneOf TestEventStoreProcedureErrors) User
-            = fmap fst . runIdentity . runUltraExceptT
-            . flip runStateT exampleStorableEvents . runInMemoryEventStore
-            $ testEventStoreProcedure
+            = fmap fst . runIdentity
+            $ runInMemoryEventStoreT exampleStorableEvents testEventStoreProcedure
+
       result `shouldBe` (Right exampleUser)
 
 exampleStorableEvents :: [StorableEvent]

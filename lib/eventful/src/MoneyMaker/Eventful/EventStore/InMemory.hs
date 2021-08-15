@@ -1,5 +1,6 @@
 module MoneyMaker.Eventful.EventStore.InMemory
   ( InMemoryEventStoreT(..)
+  , runInMemoryEventStoreT
   , runInMemoryEventStoreTWithoutErrors
 
   , StorableEvent(..)
@@ -20,8 +21,17 @@ import qualified Data.UUID  as UUID
 -- | Non-persisted in-memory event store for testing
 newtype InMemoryEventStoreT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
   = InMemoryEventStoreT
-      { runInMemoryEventStore :: StateT [StorableEvent] (UltraExceptT m errors) a }
+      { getInMemoryEventStoreT :: StateT [StorableEvent] (UltraExceptT m errors) a }
   deriving newtype (Functor, Applicative, Monad, MonadState [StorableEvent])
+
+runInMemoryEventStoreT
+  :: Monad m
+  => [StorableEvent] -- ^ Initial state of the event store
+  -> InMemoryEventStoreT m errors a
+  -> m (Either (OneOf errors) (a, [StorableEvent]))
+
+runInMemoryEventStoreT genesisEvents (InMemoryEventStoreT action)
+  = runUltraExceptT $ runStateT action genesisEvents
 
 data StorableEvent
   = StorableEvent
