@@ -59,6 +59,7 @@ ghc-options:
 
 data-files:
 - ../soothsayer/example.py
+- ../database.env
 
 executables:
   make-money:
@@ -75,6 +76,8 @@ executables:
     - money-maker-eventful
     - base
     - aeson
+    - bytestring
+    - load-env
     - monad-logger
     - persistent
     - persistent-postgresql
