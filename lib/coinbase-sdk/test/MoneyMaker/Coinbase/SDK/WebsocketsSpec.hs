@@ -26,7 +26,7 @@ sampleTickerMessage :: CoinbaseMessage
 sampleTickerMessage
   = Ticker TickerPriceData
       { productId = TradingPair BTC USD
-      , price = "41438.8"
+      , price = 41438.8
       }
 
 sampleTickerMessageJSON :: Aeson.Value

@@ -14,7 +14,7 @@ spec :: Spec
 spec = do
   describe "Eventful SwingEvent" $ do
     it "extracts all swings from price data" $ do
-      let result :: Either (OneOf '[CouldntDecodeEventError, NoEventsFoundError]) Swings
+      let result :: Either (OneOf '[Void, CouldntDecodeEventError, NoEventsFoundError]) Swings
             = fmap fst $ runIdentity $ runInMemoryEventStoreT [] $ do
                 let id = Id [uuid|123e4567-e89b-12d3-a456-426614174000|]
 
@@ -22,7 +22,7 @@ spec = do
 
                 getAggregate @SwingEvent id
 
-      result `shouldBe` (Right expectedAggregate)
+      result `shouldBe` Right expectedAggregate
 
 expectedAggregate :: Swings
 expectedAggregate

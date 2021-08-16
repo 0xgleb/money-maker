@@ -16,6 +16,7 @@ module MoneyMaker.PricePreprocessor
   where
 
 import qualified MoneyMaker.Coinbase.SDK.Websockets as Coinbase
+import qualified MoneyMaker.Error                   as Error
 import qualified MoneyMaker.Eventful                as Eventful
 
 import Protolude
@@ -28,7 +29,8 @@ import qualified Data.Fixed as Fixed
 data ContractualPriceData
   = ContractualPriceData
       { productId :: Coinbase.TradingPair
-      , price     :: Text -- TODO: change to a better type for price data
+      , swings    :: Swings
+      , price     :: Price
       }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (Aeson.ToJSON)
@@ -38,12 +40,31 @@ newtype Price
   deriving newtype (Show, Eq, Ord, Aeson.ToJSON, Aeson.FromJSON)
 
 toContractualPriceData
-  :: Eventful.MonadEventStore m
+  :: ( Eventful.MonadEventStore m
+     , Eventful.CouldntDecodeEventError `Error.Elem` errors
+     , Eventful.NoEventsFoundError `Error.Elem` errors
+     )
   => Coinbase.TickerPriceData
   -> m errors ContractualPriceData
 toContractualPriceData Coinbase.TickerPriceData{..} = do
+  let id = Eventful.Id [Eventful.uuid|123e4567-e89b-12d3-a456-426614174000|]
+
+  maybeSwings <-
+    Error.catchVoid (Just <$> Eventful.getAggregate @SwingEvent id)
+      `Error.catchUltraError` \Eventful.NoEventsFoundError -> pure Nothing
+
+  swings <- case maybeSwings of
+    Nothing ->
+      Error.catchVoid $ Eventful.applyCommand id $ AddNewPrice $ Price price
+    Just prevSwings -> do
+      let lastSavedPrice = getLastPrice prevSwings
+
+      if abs (getPrice lastSavedPrice - price) >= 1
+         then Error.catchVoid $ Eventful.applyCommand id $ AddNewPrice $ Price price
+         else pure prevSwings
+
   -- TODO: consider max precision
-  pure ContractualPriceData{..}
+  pure ContractualPriceData{ price = Price price, ..}
 
 -- Just a placeholder until Python actually sends some useful data
 data ContractualPrediction
@@ -80,21 +101,29 @@ data SwingEvent
 data Swings
   = SwingUp High
   | SwingDown Low
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
+
+getLastPrice :: Swings -> Price
+getLastPrice = \case
+  SwingUp High{..}  -> price
+  SwingDown Low{..} -> price
 
 data High
   = High
       { price       :: Price
       , previousLow :: Maybe Low
       }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
 data Low
   = Low
       { price        :: Price
       , previousHigh :: Maybe High
       }
-  deriving stock (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
 instance Eventful.Eventful SwingEvent where
   type EventName      SwingEvent = "swing"

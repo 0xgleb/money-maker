@@ -3,6 +3,7 @@ module Main where
 import Environment
 
 import qualified MoneyMaker.Coinbase.SDK.Websockets as Coinbase
+import qualified MoneyMaker.Error                   as Error
 import qualified MoneyMaker.Eventful                as Eventful
 import qualified MoneyMaker.PricePreprocessor       as Preprocessor
 
@@ -67,7 +68,9 @@ main = do
       Wuss.runSecureClient websocketHost 443 "/"
         $ Coinbase.websocketsClient $ \newPriceData -> do
             priceDataOrErrors <-
-              Eventful.runSqlEventStoreT @'[] connectionPool
+              Eventful.runSqlEventStoreT
+                @'[Eventful.CouldntDecodeEventError, Eventful.NoEventsFoundError]
+                connectionPool
                 $ Preprocessor.toContractualPriceData newPriceData
 
             case priceDataOrErrors of
@@ -75,12 +78,18 @@ main = do
                 STM.atomically $ STM.writeTQueue priceDataQueue priceData
               Left error ->
                 case error of
+                  Error.ThisOne (Eventful.CouldntDecodeEventError err) ->
+                    putStrLn $ "Couldn't decode event error: " <> err
+                  Error.Other (Error.ThisOne Eventful.NoEventsFoundError) ->
+                    putStrLn @Text "No events found"
+                  Error.Other (Error.Other _) ->
+                    putStrLn @Text "What?"
 
     -- placeholder for the function that will take a new prediction from the
     -- prediction process and evaluate whether it needs to make any changes
     -- to the portfolio based on that
     handlePrediction Preprocessor.ContractualPrediction{..} = do
-      putStrLn $ "Got back: \"" <> message <> "\""
+      putStrLn message
 
 spawnPredictionProcessAndBindToQueues
   :: IO (STM.TQueue Preprocessor.ContractualPriceData, STM.TQueue Preprocessor.ContractualPrediction)

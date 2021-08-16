@@ -6,6 +6,7 @@
 module MoneyMaker.Error
   ( MonadUltraError(..)
   , catchUltraError
+  , catchVoid
   , type Elems
   , type (++)
   , Elem
@@ -67,6 +68,12 @@ catchUltraError
   -> (error -> m errors a)
   -> m errors a
 catchUltraError = catchUltraErrorMethod
+
+catchVoid
+  :: MonadUltraError m
+  => m (Void:errors) a
+  -> m errors a
+catchVoid = flip catchUltraError absurd
 
 -- | @OneOf@ is parametrised by a list of types and contains a value
 -- of one of the types from the list
@@ -173,9 +180,6 @@ class Elem (x :: Type) (xs :: [Type]) where
 -- implement Elem and pretty similar to the type class approach that we are using
 instance Elem x (x : xs) where
   mkOneOf = ThisOne
-
-instance Elem Void xs where
-  mkOneOf = absurd
 
 -- GHC can't distinguish between this instance and the above instance.
 -- Which is why we need {-# INCOHERENT #-}
