@@ -174,6 +174,9 @@ class Elem (x :: Type) (xs :: [Type]) where
 instance Elem x (x : xs) where
   mkOneOf = ThisOne
 
+instance Elem Void xs where
+  mkOneOf = absurd
+
 -- GHC can't distinguish between this instance and the above instance.
 -- Which is why we need {-# INCOHERENT #-}
 -- INCOHERENT pragma tells GHC that if it's picking between two instances,

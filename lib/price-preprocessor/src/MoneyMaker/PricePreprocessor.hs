@@ -80,18 +80,21 @@ data SwingEvent
 data Swings
   = SwingUp High
   | SwingDown Low
+  deriving stock (Eq, Show)
 
 data High
   = High
       { price       :: Price
       , previousLow :: Maybe Low
       }
+  deriving stock (Eq, Show)
 
 data Low
   = Low
       { price        :: Price
       , previousHigh :: Maybe High
       }
+  deriving stock (Eq, Show)
 
 instance Eventful.Eventful SwingEvent where
   type EventName      SwingEvent = "swing"

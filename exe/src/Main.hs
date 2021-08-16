@@ -1,10 +1,10 @@
 module Main where
 
-import Contract
 import Environment
 
 import qualified MoneyMaker.Coinbase.SDK.Websockets as Coinbase
 import qualified MoneyMaker.Eventful                as Eventful
+import qualified MoneyMaker.PricePreprocessor       as Preprocessor
 
 import Protolude
 
@@ -57,7 +57,7 @@ main = do
     getLivePriceData
       :: Postgres.ConnectionPool
       -> Mode
-      -> STM.TQueue ContractualPriceData
+      -> STM.TQueue Preprocessor.ContractualPriceData
       -> IO ()
     getLivePriceData connectionPool mode priceDataQueue = do
       let websocketHost = case mode of
@@ -68,7 +68,7 @@ main = do
         $ Coinbase.websocketsClient $ \newPriceData -> do
             priceDataOrErrors <-
               Eventful.runSqlEventStoreT @'[] connectionPool
-                $ toContractualPriceData newPriceData
+                $ Preprocessor.toContractualPriceData newPriceData
 
             case priceDataOrErrors of
               Right priceData ->
@@ -79,11 +79,11 @@ main = do
     -- placeholder for the function that will take a new prediction from the
     -- prediction process and evaluate whether it needs to make any changes
     -- to the portfolio based on that
-    handlePrediction ContractualPrediction{..} = do
+    handlePrediction Preprocessor.ContractualPrediction{..} = do
       putStrLn $ "Got back: \"" <> message <> "\""
 
 spawnPredictionProcessAndBindToQueues
-  :: IO (STM.TQueue ContractualPriceData, STM.TQueue ContractualPrediction)
+  :: IO (STM.TQueue Preprocessor.ContractualPriceData, STM.TQueue Preprocessor.ContractualPrediction)
 spawnPredictionProcessAndBindToQueues = do
   priceDataQueue <- STM.newTQueueIO
   predictionsQueue <- STM.newTQueueIO
@@ -125,7 +125,7 @@ newtype InputHandle
 -- and doesn't just continuously run in an infinite loop is the @atomically@
 -- function, which blocks execution until there is something in the queue
 bindPriceDataQueueToProcessInput
-  :: STM.TQueue ContractualPriceData
+  :: STM.TQueue Preprocessor.ContractualPriceData
   -> InputHandle
   -> IO ()
 bindPriceDataQueueToProcessInput priceDataQueue inputHandle = do
@@ -144,7 +144,7 @@ newtype OutputHandle
 -- prediction in the output
 bindProcessOutputToPredictionsQueue
   :: OutputHandle
-  -> STM.TQueue ContractualPrediction
+  -> STM.TQueue Preprocessor.ContractualPrediction
   -> IO ()
 bindProcessOutputToPredictionsQueue
   outputHandle@(OutputHandle unpackedOutputHandle)
@@ -153,5 +153,5 @@ bindProcessOutputToPredictionsQueue
   closed <- IO.hIsClosed unpackedOutputHandle
   unless closed $ do
     message <- Txt.LIO.hGetLine unpackedOutputHandle
-    STM.atomically $ STM.writeTQueue predictionsQueue ContractualPrediction{..}
+    STM.atomically $ STM.writeTQueue predictionsQueue Preprocessor.ContractualPrediction{..}
     bindProcessOutputToPredictionsQueue outputHandle predictionsQueue

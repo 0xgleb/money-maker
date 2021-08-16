@@ -67,7 +67,7 @@ ghc-options:
 - -Wno-unticked-promoted-constructors # don't complain about unticked type-level promoted constructors
 
 tests:
-  money-maker-eventer-test:
+  money-maker-price-preprocessor-test:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
