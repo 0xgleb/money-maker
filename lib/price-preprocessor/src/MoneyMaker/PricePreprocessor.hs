@@ -1,10 +1,16 @@
 {-# LANGUAGE DeriveAnyClass #-}
 
-module Contract
+module MoneyMaker.PricePreprocessor
   ( ContractualPriceData
   , toContractualPriceData
 
   , ContractualPrediction(..)
+
+  , SwingCommand(..)
+  , SwingEvent
+  , Swings(..)
+  , High(..)
+  , Low(..)
   , Price(..)
   )
   where
@@ -46,14 +52,23 @@ data ContractualPrediction
       }
 
 
--- data SwingCommand
---   = AddNewHigh Price
---   | AddNewLow Price
+data SwingCommand
+  = AddNewPrice Price
 
--- instance Eventful.Command SwingCommand SwingEvent where
---   type CommandErrors SwingCommand = '[]
+instance Eventful.Command SwingCommand SwingEvent where
+  type CommandErrors SwingCommand = '[]
 
---   handleCommand pairId
+  handleCommand _id Nothing (AddNewPrice price)
+    = pure $ NewLowReached price :| []
+
+  handleCommand _id (Just swings) (AddNewPrice newPrice)
+    = let previousPrice = case swings of
+            SwingUp   High{..} -> price
+            SwingDown Low{..}  -> price
+
+      in pure $ if newPrice > previousPrice
+            then NewHighReached newPrice :| []
+            else NewLowReached newPrice :| []
 
 
 data SwingEvent
@@ -81,7 +96,7 @@ data Low
 instance Eventful.Eventful SwingEvent where
   type EventName      SwingEvent = "swing"
   type EventAggregate SwingEvent = Swings
-  type EventError     SwingEvent = SwingEvent
+  type EventError     SwingEvent = Void
 
   applyEvent Nothing event = pure $ case event of
     NewHighReached price ->

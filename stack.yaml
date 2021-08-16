@@ -33,6 +33,7 @@ packages:
 - ./lib/coinbase-sdk
 - ./lib/error
 - ./lib/eventful
+- ./lib/price-preprocessor
 
 # Dependency packages to be pulled from upstream that are not in the resolver.
 # These entries can reference officially published versions as well as
