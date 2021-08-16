@@ -18,6 +18,12 @@ import qualified Data.Aeson as Aeson
 import qualified Data.UUID  as UUID
 
 
+data StorableEvent
+  = StorableEvent
+      { id      :: !UUID.UUID
+      , payload :: !Aeson.Value -- ^ JSON encoded event
+      }
+
 -- | Non-persisted in-memory event store for testing
 newtype InMemoryEventStoreT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
   = InMemoryEventStoreT
@@ -32,12 +38,6 @@ runInMemoryEventStoreT
 
 runInMemoryEventStoreT genesisEvents (InMemoryEventStoreT action)
   = runUltraExceptT $ runStateT action genesisEvents
-
-data StorableEvent
-  = StorableEvent
-      { id      :: !UUID.UUID
-      , payload :: !Aeson.Value -- ^ JSON encoded event
-      }
 
 runInMemoryEventStoreTWithoutErrors
   :: Monad m

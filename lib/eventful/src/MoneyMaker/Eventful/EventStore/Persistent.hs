@@ -59,7 +59,8 @@ newtype SqlEventStoreT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
   deriving newtype (Functor, Applicative, Monad, MonadReader Persist.ConnectionPool, MonadIO)
 
 runSqlEventStoreT
-  :: Persist.ConnectionPool
+  :: forall errors m a
+   . Persist.ConnectionPool
   -> SqlEventStoreT m errors a
   -> m (Either (OneOf errors) a)
 

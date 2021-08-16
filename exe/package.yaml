@@ -75,8 +75,12 @@ executables:
     - money-maker-eventful
     - base
     - aeson
+    - monad-logger
+    - persistent
+    - persistent-postgresql
     - process
     - protolude
-    - text
+    - resource-pool
     - stm
+    - text
     - wuss
