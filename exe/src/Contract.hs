@@ -25,10 +25,6 @@ data ContractualPriceData
   deriving stock (Eq, Show, Generic)
   deriving anyclass (Aeson.ToJSON)
 
--- toContractualPriceData :: Coinbase.TickerPriceData -> ContractualPriceData
--- toContractualPriceData Coinbase.TickerPriceData{..}
---   = ContractualPriceData{..}
-
 toContractualPriceData
   :: Eventful.MonadEventStore m
   => Coinbase.TickerPriceData

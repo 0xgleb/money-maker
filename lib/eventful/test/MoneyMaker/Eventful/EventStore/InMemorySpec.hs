@@ -22,15 +22,11 @@ spec = do
     it "executing testEventStoreProcedure results in the expected user aggregate" $ do
       let result :: Either (OneOf TestEventStoreProcedureErrors) User
             = fmap fst . runIdentity
-            $ runInMemoryEventStoreT exampleStorableEvents testEventStoreProcedure
+            $ runInMemoryEventStoreT initialEventStore testEventStoreProcedure
 
       result `shouldBe` (Right exampleUser)
 
-exampleStorableEvents :: [StorableEvent]
-exampleStorableEvents
+initialEventStore :: [StorableEvent]
+initialEventStore
   = [ StorableEvent [uuid|123e4567-e89b-12d3-a456-426614174000|] Aeson.Null ]
-  -- <> storableUserEvents
   <> [ StorableEvent [uuid|123e4666-e89b-12d3-a456-426614174000|] Aeson.Null ]
-  -- where
-  --   storableUserEvents = exampleUserEvents <&> \event ->
-  --     StorableEvent [uuid|123e4666-e89b-12d3-a456-666614174000|] $ Aeson.toJSON event

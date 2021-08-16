@@ -1,6 +1,7 @@
 module Main where
 
 import Contract
+import Environment
 
 import qualified MoneyMaker.Coinbase.SDK.Websockets as Coinbase
 import qualified MoneyMaker.Eventful                as Eventful
@@ -10,55 +11,22 @@ import Protolude
 import qualified Control.Concurrent.STM      as STM
 import qualified Control.Monad.Logger        as Logger
 import qualified Data.Aeson                  as Aeson
-import qualified Data.ByteString.Char8       as BS
 import qualified Data.Pool                   as Pool
 import qualified Data.Text.Lazy.IO           as Txt.LIO
 import qualified Database.Persist.Postgresql as Postgres
 import qualified Database.Persist.Sql        as Persist
-import qualified LoadEnv
 import qualified Paths_exe                   as Path
 import qualified Prelude
-import qualified System.Environment          as Env
-import qualified System.Exit                 as Exit
 import qualified System.IO                   as IO
 import qualified System.Process              as Proc
 import qualified Wuss
 
-data Mode
-  = TestMode -- ^ use sandbox environment
-  | ProdMode -- ^ use prod environment
-  deriving stock (Show, Eq)
-
 main :: IO ()
 main = do
-  let mode = TestMode
+  Environment{..} <- getEnvironment
 
   when (mode == ProdMode)
     $ Prelude.error "Prod is NOT READY!"
-
-  LoadEnv.loadEnvFromAbsolute =<< Path.getDataFileName "../database.env"
-
-  maybeDbName   <- Env.lookupEnv "POSTGRES_DB"
-  maybeUser     <- Env.lookupEnv "POSTGRES_USER"
-  maybePassword <- Env.lookupEnv "POSTGRES_PASSWORD"
-
-  (BS.pack -> dbName, BS.pack -> user, BS.pack -> password) <-
-    case (maybeDbName, maybeUser, maybePassword) of
-      (Just db, Just user, Just password) ->
-        pure (db, user, password)
-
-      (Nothing, _, _) -> do
-        putStrLn @Text "POSTGRES_DB environment variable is missing"
-        Exit.exitFailure
-
-      (_, Nothing, _) -> do
-        putStrLn @Text "POSTGRES_USER environment variable is missing"
-        Exit.exitFailure
-
-      (_, _, Nothing) -> do
-        putStrLn @Text "POSTGRES_PASSWORD environment variable is missing"
-        Exit.exitFailure
-
 
   IO.hSetBuffering IO.stdin IO.NoBuffering -- we only need this for testing with getLine
   IO.hSetBuffering IO.stdout IO.NoBuffering -- we only need this for testing with getLine
