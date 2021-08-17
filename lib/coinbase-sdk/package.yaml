@@ -8,6 +8,7 @@ dependencies:
 - protolude
 - stm
 - text
+- time
 - websockets
 
 library:

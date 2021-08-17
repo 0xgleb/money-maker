@@ -9,6 +9,7 @@ module MoneyMaker.PricePreprocessor
   , SwingCommand(..)
   , SwingEvent
   , Swings(..)
+  , getLastPrice
   , High(..)
   , Low(..)
   , Price(..)
@@ -21,8 +22,9 @@ import qualified MoneyMaker.Eventful                as Eventful
 
 import Protolude
 
-import qualified Data.Aeson as Aeson
-import qualified Data.Fixed as Fixed
+import qualified Data.Aeson      as Aeson
+import qualified Data.Fixed      as Fixed
+import qualified Data.Time.Clock as Time
 
 -- I think using "Contractual" prefix can help identify which types have to have
 -- a certain encoding to not break the contract with the prediction mechanism
@@ -31,6 +33,7 @@ data ContractualPriceData
       { productId :: Coinbase.TradingPair
       , swings    :: Swings
       , price     :: Price
+      , time      :: Time.UTCTime
       }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (Aeson.ToJSON)
@@ -49,19 +52,21 @@ toContractualPriceData
 toContractualPriceData Coinbase.TickerPriceData{..} = do
   let id = Eventful.Id [Eventful.uuid|123e4567-e89b-12d3-a456-426614174000|]
 
-  maybeSwings <-
-    Error.catchVoid (Just <$> Eventful.getAggregate @SwingEvent id)
-      `Error.catchUltraError` \Eventful.NoEventsFoundError -> pure Nothing
+  -- maybeSwings <-
+  --   Error.catchVoid (Just <$> Eventful.getAggregate @SwingEvent id)
+  --     `Error.catchUltraError` \Eventful.NoEventsFoundError -> pure Nothing
 
-  swings <- case maybeSwings of
-    Nothing ->
-      Error.catchVoid $ Eventful.applyCommand id $ AddNewPrice $ Price price
-    Just prevSwings -> do
-      let lastSavedPrice = getLastPrice prevSwings
+  swings <- Error.catchVoid $ Eventful.applyCommand id $ AddNewPrice (Price price) time
 
-      if abs (getPrice lastSavedPrice - price) >= 1
-         then Error.catchVoid $ Eventful.applyCommand id $ AddNewPrice $ Price price
-         else pure prevSwings
+  -- swings <- case maybeSwings of
+  --   Nothing ->
+  --     Error.catchVoid $ Eventful.applyCommand id $ AddNewPrice (Price price) time
+  --   Just prevSwings -> do
+  --     let lastSavedPrice = getLastPrice prevSwings
+
+  --     if abs (getPrice lastSavedPrice - price) >= 1
+  --        then Error.catchVoid $ Eventful.applyCommand id $ AddNewPrice (Price price) time
+  --        else pure prevSwings
 
   -- TODO: consider max precision
   pure ContractualPriceData{ price = Price price, ..}
@@ -74,27 +79,27 @@ data ContractualPrediction
 
 
 data SwingCommand
-  = AddNewPrice Price
+  = AddNewPrice Price Time.UTCTime
 
 instance Eventful.Command SwingCommand SwingEvent where
   type CommandErrors SwingCommand = '[]
 
-  handleCommand _id Nothing (AddNewPrice price)
-    = pure $ NewLowReached price :| []
+  handleCommand _id Nothing (AddNewPrice price time)
+    = pure $ NewLowReached price time :| []
 
-  handleCommand _id (Just swings) (AddNewPrice newPrice)
+  handleCommand _id (Just swings) (AddNewPrice newPrice time)
     = let previousPrice = case swings of
-            SwingUp   High{..} -> price
-            SwingDown Low{..}  -> price
+            SwingUp   High{price} -> price
+            SwingDown Low{price}  -> price
 
       in pure $ if newPrice > previousPrice
-            then NewHighReached newPrice :| []
-            else NewLowReached newPrice :| []
+            then NewHighReached newPrice time :| []
+            else NewLowReached newPrice time :| []
 
 
 data SwingEvent
-  = NewHighReached Price
-  | NewLowReached Price
+  = NewHighReached Price Time.UTCTime
+  | NewLowReached Price Time.UTCTime
   deriving stock (Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
@@ -112,6 +117,7 @@ getLastPrice = \case
 data High
   = High
       { price       :: Price
+      , time        :: Time.UTCTime
       , previousLow :: Maybe Low
       }
   deriving stock (Eq, Show, Generic)
@@ -120,6 +126,7 @@ data High
 data Low
   = Low
       { price        :: Price
+      , time         :: Time.UTCTime
       , previousHigh :: Maybe High
       }
   deriving stock (Eq, Show, Generic)
@@ -131,52 +138,52 @@ instance Eventful.Eventful SwingEvent where
   type EventError     SwingEvent = Void
 
   applyEvent Nothing event = pure $ case event of
-    NewHighReached price ->
-      SwingUp $ High price Nothing
-    NewLowReached price ->
-      SwingDown $ Low price Nothing
+    NewHighReached price time ->
+      SwingUp $ High price time Nothing
+    NewLowReached price time ->
+      SwingDown $ Low price time Nothing
 
   applyEvent (Just aggregate) event
     = pure $ case (aggregate, event) of
-        ( SwingUp High{previousLow}, NewHighReached price ) ->
+        ( SwingUp High{previousLow}, NewHighReached price time ) ->
           SwingUp High{..}
 
-        ( SwingDown Low{previousHigh}, NewLowReached price ) ->
+        ( SwingDown Low{previousHigh}, NewLowReached price time ) ->
           SwingDown Low{..}
 
-        ( SwingDown low, NewHighReached price ) ->
-          SwingUp $ addNewHigh price low
+        ( SwingDown low, NewHighReached price time ) ->
+          SwingUp $ addNewHigh price time low
 
-        ( SwingUp high, NewLowReached price ) ->
-          SwingDown $ addNewLow price high
+        ( SwingUp high, NewLowReached price time ) ->
+          SwingDown $ addNewLow price time high
 
 
-addNewHigh :: Price -> Low -> High
-addNewHigh newHighPrice low@Low{previousHigh}
+addNewHigh :: Price -> Time.UTCTime -> Low -> High
+addNewHigh newHighPrice time low@Low{previousHigh}
   = case previousHigh of
       Nothing ->
-        High newHighPrice $ Just low
+        High newHighPrice time $ Just low
 
       Just High{price = prevHighPrice} | newHighPrice < prevHighPrice ->
-        High newHighPrice $ Just low
+        High newHighPrice time $ Just low
 
       Just high ->
         maybe
-          (High newHighPrice $ Just low)
-          (addNewHigh newHighPrice)
+          (High newHighPrice time $ Just low)
+          (addNewHigh newHighPrice time)
           (previousLow high)
 
-addNewLow :: Price -> High -> Low
-addNewLow newLowPrice high@High{previousLow}
+addNewLow :: Price -> Time.UTCTime -> High -> Low
+addNewLow newLowPrice time high@High{previousLow}
   = case previousLow of
       Nothing ->
-        Low newLowPrice $ Just high
+        Low newLowPrice time $ Just high
 
       Just Low{price = prevLowPrice} | newLowPrice > prevLowPrice ->
-        Low newLowPrice $ Just high
+        Low newLowPrice time $ Just high
 
       Just low ->
         maybe
-          (Low newLowPrice $ Just high)
-          (addNewLow newLowPrice)
+          (Low newLowPrice time $ Just high)
+          (addNewLow newLowPrice time)
           (previousHigh low)

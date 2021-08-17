@@ -21,6 +21,7 @@ import           Data.Aeson         ((.:), (.=))
 import qualified Data.Aeson         as Aeson
 import qualified Data.Fixed         as Fixed
 import qualified Data.Text          as Txt
+import qualified Data.Time.Clock    as Time
 import qualified Network.WebSockets as WS
 
 websocketsClient :: (TickerPriceData -> IO ()) -> WS.ClientApp ()
@@ -55,6 +56,7 @@ data TickerPriceData
   = TickerPriceData
       { productId :: TradingPair
       , price     :: Fixed.Centi
+      , time      :: Time.UTCTime
       }
   deriving stock (Eq, Show)
 
@@ -72,6 +74,7 @@ instance Aeson.FromJSON TickerPriceData where
     = Aeson.withObject "TickerPriceData" $ \object -> do
         productId <- object .: "product_id"
         textPrice <- object .: "price"
+        time      <- object .: "time"
         case readMaybe textPrice of
           Just price ->
             pure TickerPriceData{..}

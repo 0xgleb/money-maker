@@ -5,9 +5,11 @@ module MoneyMaker.Coinbase.SDK.WebsocketsSpec
 
 import MoneyMaker.Coinbase.SDK.Websockets
 
+import qualified Data.Aeson         as Aeson
+import qualified Data.Aeson.QQ      as Aeson
+import qualified Data.Time.Calendar as Time
+import qualified Data.Time.Clock    as Time
 import           Protolude
-import qualified Data.Aeson as Aeson
-import qualified Data.Aeson.QQ as Aeson
 
 import Test.Hspec
 import Test.Hspec.Expectations.Json
@@ -27,6 +29,10 @@ sampleTickerMessage
   = Ticker TickerPriceData
       { productId = TradingPair BTC USD
       , price = 41438.8
+      , time
+          = Time.UTCTime
+              (Time.fromGregorian 2021 07 31)
+              (Time.secondsToDiffTime (19 * 60 * 60 + 37 * 60 + 38))
       }
 
 sampleTickerMessageJSON :: Aeson.Value
@@ -35,7 +41,7 @@ sampleTickerMessageJSON =
   {
       "last_size": "0.0065",
       "trade_id": 32205173,
-      "time": "2021-07-31T19:37:38.975749Z",
+      "time": "2021-07-31T19:37:38Z",
       "side": "sell",
       "best_ask": "41478.80",
       "best_bid": "41419.04",

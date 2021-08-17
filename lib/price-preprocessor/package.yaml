@@ -3,12 +3,13 @@ version:             0.1.0.0
 license:             BSD3
 
 dependencies:
-- base
-- aeson
 - money-maker-coinbase-sdk
 - money-maker-error
 - money-maker-eventful
+- base
+- aeson
 - protolude
+- time
 
 library:
   source-dirs: src
