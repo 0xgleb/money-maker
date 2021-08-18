@@ -52,23 +52,13 @@ toContractualPriceData
 toContractualPriceData Coinbase.TickerPriceData{..} = do
   let id = Eventful.Id [Eventful.uuid|123e4567-e89b-12d3-a456-426614174000|]
 
-  -- maybeSwings <-
-  --   Error.catchVoid (Just <$> Eventful.getAggregate @SwingEvent id)
-  --     `Error.catchUltraError` \Eventful.NoEventsFoundError -> pure Nothing
-
+  -- I tried running this with live data and I think we're better off using candles
+  -- for calculating swings. Otherwise we will emit an event for every single price movement,
+  -- which will spam the database very significantly.
+  --
+  -- We can't get candles from the websockets API, so REST API support needs to be added first
   swings <- Error.catchVoid $ Eventful.applyCommand id $ AddNewPrice (Price price) time
 
-  -- swings <- case maybeSwings of
-  --   Nothing ->
-  --     Error.catchVoid $ Eventful.applyCommand id $ AddNewPrice (Price price) time
-  --   Just prevSwings -> do
-  --     let lastSavedPrice = getLastPrice prevSwings
-
-  --     if abs (getPrice lastSavedPrice - price) >= 1
-  --        then Error.catchVoid $ Eventful.applyCommand id $ AddNewPrice (Price price) time
-  --        else pure prevSwings
-
-  -- TODO: consider max precision
   pure ContractualPriceData{ price = Price price, ..}
 
 -- Just a placeholder until Python actually sends some useful data
