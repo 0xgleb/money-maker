@@ -25,6 +25,8 @@ spec = do
 
                 getAggregate @SwingEvent id
 
+      -- I've drawn a chart for this example so that it's easier to understand what's going on
+      -- You can find it in docs/swings-example.png
       result `shouldBe` Right expectedAggregate
 
 expectedAggregate :: Swings
