@@ -6,6 +6,8 @@ dependencies:
 - base
 - aeson
 - protolude
+- servant
+- servant-client
 - stm
 - text
 - time

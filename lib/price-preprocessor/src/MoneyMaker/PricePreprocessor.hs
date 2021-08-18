@@ -38,10 +38,6 @@ data ContractualPriceData
   deriving stock (Eq, Show, Generic)
   deriving anyclass (Aeson.ToJSON)
 
-newtype Price
-  = Price { getPrice :: Fixed.Centi }
-  deriving newtype (Show, Eq, Ord, Aeson.ToJSON, Aeson.FromJSON)
-
 toContractualPriceData
   :: ( Eventful.MonadEventStore m
      , Eventful.CouldntDecodeEventError `Error.Elem` errors
