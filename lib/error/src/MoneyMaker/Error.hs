@@ -7,10 +7,16 @@ module MoneyMaker.Error
   ( MonadUltraError(..)
   , catchUltraError
   , type Elems
+  , type (++)
   , Elem
   , OneOf(..)
   , getOneOf
   , UltraEither(..)
+
+  , UltraExceptT(..)
+  , runUltraExceptT
+  , runUltraExceptTWithoutErrors
+  , liftToUltraExceptT
   )
   where
 
@@ -145,6 +151,11 @@ type family Elems (monoErrors :: [Type]) (polyErrors :: [Type]) :: Constraint wh
     , es `Elems` errors -- ensure the same for the following elements
     )
 
+type family (++) (listA :: [a]) (listB :: [a]) :: [a] where
+  '[] ++ listB = listB
+
+  (x : xs) ++ listB = x : (xs ++ listB)
+
 -- | We need @Elem@ for two reasons: one is to assert that an error is in the
 -- error list and the other is for creating a value of type @OneOf xs@ from
 -- a value of type @x@ if type @x@ is in the type-level list @xs@
@@ -188,3 +199,45 @@ instance MonadUltraError UltraEither where
     = case getOneOf error of
         Left err  -> UltraEither $ Left err
         Right err -> handleError err
+
+-- | ExceptT parametrised by errors it can have
+newtype UltraExceptT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
+  = UltraExceptT { getUltraExceptT :: ExceptT (OneOf errors) m a }
+  deriving newtype (Functor, Applicative, Monad, MonadIO)
+
+runUltraExceptT :: UltraExceptT m errors a -> m (Either (OneOf errors) a)
+runUltraExceptT = runExceptT . getUltraExceptT
+
+liftToUltraExceptT :: Monad m => m a -> UltraExceptT m errors a
+liftToUltraExceptT
+  = UltraExceptT . lift
+
+-- | This function allows unwrapping UltraExceptT without any errors
+-- if the error list is empty
+runUltraExceptTWithoutErrors :: Monad m => UltraExceptT m '[] a -> m a
+runUltraExceptTWithoutErrors UltraExceptT{..} = do
+  result <- runExceptT getUltraExceptT
+  case result of
+    Right rightResult ->
+      pure rightResult
+    Left error ->
+      case error of -- an empty case statement because there are no values of OneOf '[]
+
+instance Monad m => MonadUltraError (UltraExceptT m) where
+  throwUltraError error
+    = UltraExceptT $ throwError $ mkOneOf error
+
+  catchUltraErrorMethod
+    :: forall error errors a
+     . UltraExceptT m (error:errors) a
+    -> (error -> UltraExceptT m errors a)
+    -> UltraExceptT m errors a
+  catchUltraErrorMethod (UltraExceptT failableAction) handleError = do
+    result <- liftToUltraExceptT $ runExceptT failableAction
+    case result of
+      Right val ->
+        pure val
+      Left (error :: OneOf (error:errors)) ->
+        case getOneOf error of
+          Left (err :: OneOf errors)  -> UltraExceptT $ throwError err
+          Right (err :: error) -> handleError err

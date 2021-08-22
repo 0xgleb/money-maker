@@ -1,54 +1,80 @@
 module Main where
 
 import Contract
+import Environment
 
 import qualified MoneyMaker.Coinbase.SDK.Websockets as Coinbase
+import qualified MoneyMaker.Eventful                as Eventful
 
 import Protolude
 
-import qualified Control.Concurrent.STM as STM
-import qualified Data.Aeson             as Aeson
-import qualified Data.Text.Lazy.IO      as Txt.LIO
-import qualified Paths_exe              as Path
-import qualified System.IO              as IO
-import qualified System.Process         as Proc
+import qualified Control.Concurrent.STM      as STM
+import qualified Control.Monad.Logger        as Logger
+import qualified Data.Aeson                  as Aeson
+import qualified Data.Pool                   as Pool
+import qualified Data.Text.Lazy.IO           as Txt.LIO
+import qualified Database.Persist.Postgresql as Postgres
+import qualified Database.Persist.Sql        as Persist
+import qualified Paths_exe                   as Path
+import qualified Prelude
+import qualified System.IO                   as IO
+import qualified System.Process              as Proc
 import qualified Wuss
-
-data Mode
-  = TestMode -- ^ use sandbox environment
-  | ProdMode -- ^ use prod environment
-  deriving stock (Show, Eq)
 
 main :: IO ()
 main = do
-  let mode = TestMode
+  Environment{..} <- getEnvironment
 
   when (mode == ProdMode)
-    $ putStrLn @Text "WARNING: RUNNING IN PROD MODE!"
+    $ Prelude.error "Prod is NOT READY!"
 
   IO.hSetBuffering IO.stdin IO.NoBuffering -- we only need this for testing with getLine
   IO.hSetBuffering IO.stdout IO.NoBuffering -- we only need this for testing with getLine
 
   (priceDataQueue, predictionQueue) <- spawnPredictionProcessAndBindToQueues
 
-  void $ forkIO $ getLivePriceData mode priceDataQueue
+  let connectionString
+        =  "host=localhost user=" <> user
+        <> " dbname=" <> dbName
+        <> " password=" <> password
 
-  void $ forever $ do
-    prediction <- STM.atomically $ STM.readTQueue predictionQueue
-    handlePrediction prediction
+  Logger.runNoLoggingT
+    $ Postgres.withPostgresqlPool connectionString 2
+    $ \connectionPool -> liftIO $ do
+        Pool.withResource connectionPool
+          $ runReaderT $ Persist.runMigration Eventful.migrateAll
+
+        void $ forkIO $ getLivePriceData connectionPool mode priceDataQueue
+
+        void $ forever $ do
+          prediction <- STM.atomically $ STM.readTQueue predictionQueue
+          handlePrediction prediction
 
   where
     -- placeholder for the function that will get live price data from the
     -- Coinbase Pro Websockets API, process it, and write relevant information
     -- into the price data queue
-    getLivePriceData :: Mode -> STM.TQueue ContractualPriceData -> IO ()
-    getLivePriceData mode priceDataQueue = do
+    getLivePriceData
+      :: Postgres.ConnectionPool
+      -> Mode
+      -> STM.TQueue ContractualPriceData
+      -> IO ()
+    getLivePriceData connectionPool mode priceDataQueue = do
       let websocketHost = case mode of
             ProdMode -> "ws-feed.pro.coinbase.com"
             TestMode -> "ws-feed-public.sandbox.pro.coinbase.com"
 
-      Wuss.runSecureClient websocketHost 443 "/" $ Coinbase.websocketsClient $ \newPriceData ->
-        STM.atomically $ STM.writeTQueue priceDataQueue $ toContractualPriceData newPriceData
+      Wuss.runSecureClient websocketHost 443 "/"
+        $ Coinbase.websocketsClient $ \newPriceData -> do
+            priceDataOrErrors <-
+              Eventful.runSqlEventStoreT @'[] connectionPool
+                $ toContractualPriceData newPriceData
+
+            case priceDataOrErrors of
+              Right priceData ->
+                STM.atomically $ STM.writeTQueue priceDataQueue priceData
+              Left error ->
+                case error of
 
     -- placeholder for the function that will take a new prediction from the
     -- prediction process and evaluate whether it needs to make any changes

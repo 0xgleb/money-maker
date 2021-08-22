@@ -9,6 +9,7 @@ module Contract
   where
 
 import qualified MoneyMaker.Coinbase.SDK.Websockets as Coinbase
+import qualified MoneyMaker.Eventful                as Eventful
 
 import Protolude
 
@@ -24,9 +25,12 @@ data ContractualPriceData
   deriving stock (Eq, Show, Generic)
   deriving anyclass (Aeson.ToJSON)
 
-toContractualPriceData :: Coinbase.TickerPriceData -> ContractualPriceData
-toContractualPriceData Coinbase.TickerPriceData{..}
-  = ContractualPriceData{..}
+toContractualPriceData
+  :: Eventful.MonadEventStore m
+  => Coinbase.TickerPriceData
+  -> m errors ContractualPriceData
+toContractualPriceData Coinbase.TickerPriceData{..} = do
+  pure ContractualPriceData{..}
 
 -- Just a placeholder until Python actually sends some useful data
 data ContractualPrediction

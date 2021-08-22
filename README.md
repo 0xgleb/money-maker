@@ -1,3 +1,45 @@
+# How to
+
+## Build
+
+If you want to have an optimised executable then run the following command
+
+```bash
+stack build
+```
+
+If you want to have faster compilation times at the expense of having less optimised executable then run this
+
+```bash
+stack build --fast
+```
+
+## Run
+
+First you need to start the database. Make sure you have `docker` and `docker-compose` installed and the `docker` service is running. Then run the following command
+
+```bash
+docker-compose up
+```
+
+If you don't want `docker-compose` to occupy your terminal then you can run it detached
+
+```bash
+docker-compose up -d
+```
+
+Then, assuming you have built the project, you can run the executable
+
+```bash
+stack exec make-money
+```
+
+## Test
+
+```bash
+stack test --fast --file-watch --test-arguments "--color"
+```
+
 # Money Maker Roadmap
 
 ## Init

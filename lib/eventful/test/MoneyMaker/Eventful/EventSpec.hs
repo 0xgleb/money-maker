@@ -1,0 +1,157 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE StrictData     #-}
+
+module MoneyMaker.Eventful.EventSpec
+  ( spec
+
+  , Role(..)
+  , User(..)
+  , UserEvent(..)
+  , UserEventError(..)
+  , exampleUserEvents
+  , exampleUser
+
+  , UserCommand(..)
+  , UserAlreadyExistsError(..)
+  , UserDoesntExist(..)
+  )
+  where
+
+import MoneyMaker.Error
+import MoneyMaker.Eventful.Event
+import MoneyMaker.Eventful.Command
+
+import qualified Data.Aeson as Aeson
+import           Protolude
+import           Test.Hspec
+
+spec :: Spec
+spec = do
+  describe "computeCurrentState" $ do
+    it "correctly computes example user events" $ do
+      let currentState
+            = computeCurrentState @_ @[NoEventsFoundError, UserEventError] exampleUserEvents
+
+      getUltraEither currentState `shouldBe` (Right exampleUser)
+
+exampleUserEvents :: [UserEvent]
+exampleUserEvents =
+  [ UserCreated
+  , NameUpdated "Creator"
+  , RoleSet Genius
+  , NameUpdated "Gleb"
+  , RoleSet Engineer
+  ]
+
+exampleUser :: User
+exampleUser = User (Just "Gleb") (Just Engineer)
+
+data UserEvent
+  = UserCreated
+  | NameUpdated Text
+  | RoleSet Role
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
+
+data Role
+  = Engineer
+  | Manager
+  | Genius
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
+
+data User
+  = User
+      { name :: Maybe Text
+      , role :: Maybe Role
+      }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
+
+data UserEventError
+  = CantUpdateNonExistentUserError
+  | CantCreateExistingUser
+  deriving stock (Eq, Show)
+
+instance Eventful UserEvent where
+  type EventName      UserEvent = "user"
+  type EventAggregate UserEvent = User
+  type EventError     UserEvent = UserEventError
+
+  applyEvent Nothing = \case
+    UserCreated ->
+      pure $ User Nothing Nothing
+
+    NameUpdated _ ->
+      throwUltraError CantUpdateNonExistentUserError
+
+    RoleSet _ ->
+      throwUltraError CantUpdateNonExistentUserError
+
+  applyEvent (Just user) = \case
+    UserCreated ->
+      throwUltraError CantCreateExistingUser
+
+    NameUpdated newName ->
+      pure $ user { name = Just newName }
+
+    RoleSet newRole ->
+      pure $ user { role = Just newRole }
+
+data UserCommand
+  = CreateUser
+  | SetName Text
+  | SetRole Role
+
+data UserAlreadyExistsError
+  = UserAlreadyExistsError
+      { message :: !Text
+      , userId  :: !(Id "user")
+      }
+
+data UserDoesntExist
+  = UserDoesntExist
+      { message :: !Text
+      , userId  :: !(Id "user")
+      }
+
+instance Command UserCommand UserEvent where
+  type CommandErrors UserCommand =
+    '[ UserAlreadyExistsError
+     , UserDoesntExist
+     ]
+
+  handleCommand
+    :: ( MonadUltraError m
+       , CommandErrors UserCommand `Elems` errors
+       )
+    => Id "user"
+    -> Maybe User
+    -> UserCommand
+    -> m errors (NonEmpty UserEvent)
+
+  handleCommand userId maybeUser userCommand
+    = case (maybeUser, userCommand) of
+        (Just _, CreateUser) ->
+          throwUltraError UserAlreadyExistsError
+            { message = "Received CreateUser command but this user already exists"
+            , userId
+            }
+        (Nothing, CreateUser) ->
+          pure $ pure UserCreated
+
+        (Nothing, SetName _) ->
+          throwUltraError UserDoesntExist
+            { message = "Received SetName command but this user doesn't exists"
+            , userId
+            }
+        (Just _, SetName name) ->
+          pure $ pure $ NameUpdated name
+
+        (Nothing, SetRole _) ->
+          throwUltraError UserDoesntExist
+            { message = "Received RoleSet command but this user doesn't exists"
+            , userId
+            }
+        (Just _, SetRole role) ->
+          pure $ pure $ RoleSet role
