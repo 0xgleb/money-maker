@@ -1,21 +1,37 @@
 module Main where
 
+import Contract
+
+import qualified MoneyMaker.Coinbase.SDK.Websockets as Coinbase
+
 import Protolude
 
 import qualified Control.Concurrent.STM as STM
+import qualified Data.Aeson             as Aeson
 import qualified Data.Text.Lazy.IO      as Txt.LIO
 import qualified Paths_exe              as Path
 import qualified System.IO              as IO
 import qualified System.Process         as Proc
+import qualified Wuss
+
+data Mode
+  = TestMode -- ^ use sandbox environment
+  | ProdMode -- ^ use prod environment
+  deriving stock (Show, Eq)
 
 main :: IO ()
 main = do
+  let mode = TestMode
+
+  when (mode == ProdMode)
+    $ putStrLn @Text "WARNING: RUNNING IN PROD MODE!"
+
   IO.hSetBuffering IO.stdin IO.NoBuffering -- we only need this for testing with getLine
   IO.hSetBuffering IO.stdout IO.NoBuffering -- we only need this for testing with getLine
 
   (priceDataQueue, predictionQueue) <- spawnPredictionProcessAndBindToQueues
 
-  void $ forkIO $ forever $ getLivePriceData priceDataQueue
+  void $ forkIO $ getLivePriceData mode priceDataQueue
 
   void $ forever $ do
     prediction <- STM.atomically $ STM.readTQueue predictionQueue
@@ -23,30 +39,22 @@ main = do
 
   where
     -- placeholder for the function that will get live price data from the
-    -- Binance Websockets API, process it, and write relevant information
+    -- Coinbase Pro Websockets API, process it, and write relevant information
     -- into the price data queue
-    getLivePriceData :: STM.TQueue ContractualPriceData -> IO ()
-    getLivePriceData priceDataQueue = do
-      message <- getLine
-      STM.atomically $ STM.writeTQueue priceDataQueue ContractualPriceData{..}
+    getLivePriceData :: Mode -> STM.TQueue ContractualPriceData -> IO ()
+    getLivePriceData mode priceDataQueue = do
+      let websocketHost = case mode of
+            ProdMode -> "ws-feed.pro.coinbase.com"
+            TestMode -> "ws-feed-public.sandbox.pro.coinbase.com"
+
+      Wuss.runSecureClient websocketHost 443 "/" $ Coinbase.websocketsClient $ \newPriceData ->
+        STM.atomically $ STM.writeTQueue priceDataQueue $ toContractualPriceData newPriceData
 
     -- placeholder for the function that will take a new prediction from the
     -- prediction process and evaluate whether it needs to make any changes
     -- to the portfolio based on that
     handlePrediction ContractualPrediction{..} = do
-      putStrLn $ "Got back: " <> message
-
--- I think using "Contractual" prefix can help identify which types have to have
--- a certain encoding to not break the contract with the prediction mechanism
-data ContractualPriceData
-  = ContractualPriceData
-      { message :: Text
-      }
-
-data ContractualPrediction
-  = ContractualPrediction
-      { message :: LText
-      }
+      putStrLn $ "Got back: \"" <> message <> "\""
 
 spawnPredictionProcessAndBindToQueues
   :: IO (STM.TQueue ContractualPriceData, STM.TQueue ContractualPrediction)
@@ -95,11 +103,11 @@ bindPriceDataQueueToProcessInput
   -> InputHandle
   -> IO ()
 bindPriceDataQueueToProcessInput priceDataQueue inputHandle = do
-  ContractualPriceData{..} <- STM.atomically $ STM.readTQueue priceDataQueue
-  let shouldStop = message == "stop"
-  unless shouldStop $ do
-    hPutStrLn @Text (unpackInputHandle inputHandle) message
-    bindPriceDataQueueToProcessInput priceDataQueue inputHandle
+  contractualPriceData <- STM.atomically $ STM.readTQueue priceDataQueue
+
+  hPutStrLn (unpackInputHandle inputHandle) $ Aeson.encode contractualPriceData
+
+  bindPriceDataQueueToProcessInput priceDataQueue inputHandle
 
 newtype OutputHandle
   = OutputHandle { unpackOutputHandle :: Handle }

@@ -6,9 +6,9 @@ First we need to build the foundation for the project so that we have something 
 - Set up the Haskell project
 - Set up the Python project
 - Integrate Haskell with Python
-- Integrate Binance API
+- Integrate Coinbase Pro API
 
-I think we can consider this stage done when we can get price data from Binance, pass it to the Python code, and execute a trade on Binance.
+I think we can consider this stage done when we can get price data from Coinbase Pro, pass it to the Python code, and execute a trade on Coinbase Pro.
 
 ## MVP
 
