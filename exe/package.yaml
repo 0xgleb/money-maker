@@ -74,6 +74,7 @@ executables:
     - money-maker-coinbase-sdk
     - money-maker-error
     - money-maker-eventful
+    - money-maker-price-preprocessor
     - base
     - aeson
     - bytestring

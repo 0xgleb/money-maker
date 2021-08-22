@@ -16,11 +16,13 @@ module MoneyMaker.Coinbase.SDK.Websockets
 
 import Protolude
 
-import qualified Data.Aeson         as Aeson
-import qualified Data.Text          as Txt
-import           Data.Aeson         ((.=), (.:))
-import qualified Network.WebSockets as WS
 import qualified Control.Monad.Fail as Fail
+import           Data.Aeson         ((.:), (.=))
+import qualified Data.Aeson         as Aeson
+import qualified Data.Fixed         as Fixed
+import qualified Data.Text          as Txt
+import qualified Data.Time.Clock    as Time
+import qualified Network.WebSockets as WS
 
 websocketsClient :: (TickerPriceData -> IO ()) -> WS.ClientApp ()
 websocketsClient writeNewPriceDataToQueue conn = do
@@ -53,7 +55,8 @@ data CoinbaseMessage
 data TickerPriceData
   = TickerPriceData
       { productId :: TradingPair
-      , price     :: Text -- TODO: change to a better type for price data
+      , price     :: Fixed.Centi
+      , time      :: Time.UTCTime
       }
   deriving stock (Eq, Show)
 
@@ -70,8 +73,13 @@ instance Aeson.FromJSON TickerPriceData where
   parseJSON
     = Aeson.withObject "TickerPriceData" $ \object -> do
         productId <- object .: "product_id"
-        price     <- object .: "price"
-        pure TickerPriceData{..}
+        textPrice <- object .: "price"
+        time      <- object .: "time"
+        case readMaybe textPrice of
+          Just price ->
+            pure TickerPriceData{..}
+          Nothing ->
+            Fail.fail $ "Couldn't decode price: " <> textPrice
 
 subscribeMessage :: SubscribeMessage
 subscribeMessage

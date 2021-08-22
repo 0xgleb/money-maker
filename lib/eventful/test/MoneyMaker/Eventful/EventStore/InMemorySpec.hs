@@ -24,9 +24,9 @@ spec = do
             = fmap fst . runIdentity
             $ runInMemoryEventStoreT initialEventStore testEventStoreProcedure
 
-      result `shouldBe` (Right exampleUser)
+      result `shouldBe` Right exampleUser
 
 initialEventStore :: [StorableEvent]
 initialEventStore
-  = [ StorableEvent [uuid|123e4567-e89b-12d3-a456-426614174000|] Aeson.Null ]
+  =  [ StorableEvent [uuid|123e4567-e89b-12d3-a456-426614174000|] Aeson.Null ]
   <> [ StorableEvent [uuid|123e4666-e89b-12d3-a456-426614174000|] Aeson.Null ]

@@ -27,7 +27,7 @@ class
   , KnownSymbol (EventName event)
   ) => Eventful event
   where
-    type family EventName event      :: Symbol
+    type family EventName      event :: Symbol
     type family EventAggregate event :: Type
     type family EventError     event :: Type
 

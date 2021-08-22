@@ -1,0 +1,83 @@
+name:                money-maker-price-preprocessor
+version:             0.1.0.0
+license:             BSD3
+
+dependencies:
+- money-maker-coinbase-sdk
+- money-maker-error
+- money-maker-eventful
+- base
+- aeson
+- protolude
+- time
+
+library:
+  source-dirs: src
+
+default-extensions:
+- BangPatterns
+- BlockArguments
+- ConstraintKinds
+- DefaultSignatures
+- DeriveDataTypeable
+- DeriveGeneric
+- DeriveLift
+- DeriveTraversable  # Implies: DeriveFoldable, DeriveFunctor
+- DerivingVia  # Implies: DerivingStrategies
+- DuplicateRecordFields
+- EmptyCase
+- FlexibleContexts
+- FlexibleInstances  # Implies: TypeSynonymInstances
+- FunctionalDependencies  # Implies: MultiParamTypeClasses
+- GADTs  # Implies: GADTSyntax, MonoLocalBinds
+- GeneralizedNewtypeDeriving
+- InstanceSigs
+- LambdaCase
+- MagicHash
+- MultiParamTypeClasses  # Implies: ConstrainedClassMethods
+- NamedFieldPuns
+- NoImplicitPrelude
+- NoMonomorphismRestriction
+- NoStarIsType
+- NumericUnderscores
+- OverloadedStrings
+- PatternSynonyms
+- QuasiQuotes
+- RankNTypes  # Implies: ExplicitForAll
+- RecordWildCards  # Implies: DisambiguateRecordFields
+- ScopedTypeVariables  # Implies: ExplicitForAll
+- StandaloneDeriving
+- TupleSections
+- TypeApplications
+- TypeFamilyDependencies  # Implies: TypeFamilies
+- TypeInType  # Implies: DataKinds, KindSignatures, PolyKinds
+- TypeOperators  # Implies: ExplicitNamespaces
+- ViewPatterns
+
+ghc-options:
+- -freverse-errors # reverses the order of errors
+- -Wall # all the next options turn on warnings and turn them into errors
+- -Werror
+- -Wimplicit-prelude
+- -Wincomplete-record-updates
+- -Wmissing-home-modules
+- -Wnoncanonical-monad-instances
+- -Wnoncanonical-monoid-instances
+- -Wpartial-fields
+- -Wsemigroup
+- -Wno-unticked-promoted-constructors # don't complain about unticked type-level promoted constructors
+
+tests:
+  money-maker-price-preprocessor-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - money-maker-price-preprocessor
+    - QuickCheck
+    - hspec
+    # - generic-random
+    # - quickcheck-text

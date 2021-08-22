@@ -120,6 +120,7 @@ getAggregateWithSql (_ :: Proxy event) (Id uuid) = do
 
   case decodedEvents of
     Nothing ->
+      -- TODO: throw a more useful error
       throwUltraError $ CouldntDecodeEventError "Couldn't decode smth, idk what"
     Just events ->
       computeCurrentState @event events
