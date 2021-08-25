@@ -8,6 +8,7 @@ module MoneyMaker.Eventful.EventStore.Persistent
 
   , SqlEventStoreT(..)
   , runSqlEventStoreT
+  , runSqlEventStoreTWithoutErrors
   )
   where
 
@@ -66,6 +67,15 @@ runSqlEventStoreT
 
 runSqlEventStoreT connectionPool (SqlEventStoreT action)
   = runUltraExceptT $ runReaderT action connectionPool
+
+runSqlEventStoreTWithoutErrors
+  :: Monad m
+  => Persist.ConnectionPool
+  -> SqlEventStoreT m '[] a
+  -> m a
+
+runSqlEventStoreTWithoutErrors connectionPool (SqlEventStoreT action)
+  = runUltraExceptTWithoutErrors $ runReaderT action connectionPool
 
 instance Monad m => MonadUltraError (SqlEventStoreT m) where
   throwUltraError = SqlEventStoreT . lift . throwUltraError

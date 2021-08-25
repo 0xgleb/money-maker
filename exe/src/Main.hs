@@ -66,24 +66,19 @@ main = do
             TestMode -> "ws-feed-public.sandbox.pro.coinbase.com"
 
       Wuss.runSecureClient websocketHost 443 "/"
-        $ Coinbase.websocketsClient $ \newPriceData -> do
-            priceDataOrErrors <-
-              Eventful.runSqlEventStoreT
-                @'[Eventful.CouldntDecodeEventError, Eventful.NoEventsFoundError]
-                connectionPool
-                $ Preprocessor.toContractualPriceData newPriceData
+        $ Coinbase.websocketsClient $ \newPriceData ->
+            Eventful.runSqlEventStoreTWithoutErrors connectionPool
+              $ Error.handleAllErrors @'[Eventful.NoEventsFoundError, Eventful.CouldntDecodeEventError]
+                  (processPriceData priceDataQueue newPriceData)
 
-            case priceDataOrErrors of
-              Right priceData ->
-                STM.atomically $ STM.writeTQueue priceDataQueue priceData
-              Left error ->
-                case error of
-                  Error.ThisOne (Eventful.CouldntDecodeEventError err) ->
-                    putStrLn $ "Couldn't decode event error: " <> err
-                  Error.Other (Error.ThisOne Eventful.NoEventsFoundError) ->
-                    putStrLn @Text "No events found"
-                  Error.Other (Error.Other _) ->
-                    putStrLn @Text "What?"
+                  (\Eventful.NoEventsFoundError -> putStrLn @Text "No events found")
+
+                  (\(Eventful.CouldntDecodeEventError err) ->
+                    putStrLn $ "Couldn't decode event error: " <> err)
+
+    processPriceData priceDataQueue newPriceData = do
+      priceData <- Preprocessor.toContractualPriceData newPriceData
+      liftIO $ STM.atomically $ STM.writeTQueue priceDataQueue priceData
 
     -- placeholder for the function that will take a new prediction from the
     -- prediction process and evaluate whether it needs to make any changes
