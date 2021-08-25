@@ -190,6 +190,33 @@ instance Elem x (x : xs) where
 instance {-# INCOHERENT #-} Elem x xs => Elem x (y : xs) where
   mkOneOf = Other . mkOneOf
 
+
+-- | handleAllErrors method allows us to provide error handling functions for every single error
+-- one by one until we have no errors left
+class MonadUltraError m
+  => ErrorHandler (errors :: [Type]) (m :: [Type] -> Type -> Type) (a :: Type) (result :: Type)
+  | errors m a -> result
+  where
+    handleAllErrors
+      :: m errors a
+      -> result
+
+instance MonadUltraError m => ErrorHandler '[] m a (m '[] a) where
+  handleAllErrors :: m '[] a -> m '[] a
+  handleAllErrors = identity
+
+instance
+  ( MonadUltraError m
+  , ErrorHandler errors m a result
+  ) => ErrorHandler (error : errors) m a ((error -> m errors a) -> result)
+  where
+    handleAllErrors
+      :: m (error : errors) a
+      -> (error -> m errors a)
+      -> result
+    handleAllErrors action errorHandler
+      = handleAllErrors $ catchUltraError action errorHandler
+
 -- | Newtype around @Either@ that
 newtype UltraEither (errors :: [Type]) (a :: Type)
   = UltraEither { getUltraEither :: Either (OneOf errors) a }
