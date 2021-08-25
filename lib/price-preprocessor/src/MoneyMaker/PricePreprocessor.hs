@@ -12,18 +12,16 @@ module MoneyMaker.PricePreprocessor
   , getLastPrice
   , High(..)
   , Low(..)
-  , Price(..)
   )
   where
 
-import qualified MoneyMaker.Coinbase.SDK.Websockets as Coinbase
-import qualified MoneyMaker.Error                   as Error
-import qualified MoneyMaker.Eventful                as Eventful
+import qualified MoneyMaker.Coinbase.SDK as Coinbase
+import qualified MoneyMaker.Error        as Error
+import qualified MoneyMaker.Eventful     as Eventful
 
 import Protolude
 
 import qualified Data.Aeson      as Aeson
-import qualified Data.Fixed      as Fixed
 import qualified Data.Time.Clock as Time
 
 -- I think using "Contractual" prefix can help identify which types have to have
@@ -32,7 +30,7 @@ data ContractualPriceData
   = ContractualPriceData
       { productId :: Coinbase.TradingPair
       , swings    :: Swings
-      , price     :: Price
+      , price     :: Coinbase.Price
       , time      :: Time.UTCTime
       }
   deriving stock (Eq, Show, Generic)
@@ -53,9 +51,12 @@ toContractualPriceData Coinbase.TickerPriceData{..} = do
   -- which will spam the database very significantly.
   --
   -- We can't get candles from the websockets API, so REST API support needs to be added first
-  swings <- Error.catchVoid $ Eventful.applyCommand id $ AddNewPrice (Price price) time
+  swings <-
+    Error.catchVoid
+      $ Eventful.applyCommand id
+      $ AddNewPrice (Coinbase.Price price) time
 
-  pure ContractualPriceData{ price = Price price, ..}
+  pure ContractualPriceData{ price = Coinbase.Price price, ..}
 
 -- Just a placeholder until Python actually sends some useful data
 data ContractualPrediction
@@ -65,7 +66,7 @@ data ContractualPrediction
 
 
 data SwingCommand
-  = AddNewPrice Price Time.UTCTime
+  = AddNewPrice Coinbase.Price Time.UTCTime
 
 instance Eventful.Command SwingCommand SwingEvent where
   type CommandErrors SwingCommand = '[]
@@ -84,8 +85,8 @@ instance Eventful.Command SwingCommand SwingEvent where
 
 
 data SwingEvent
-  = NewHighReached Price Time.UTCTime
-  | NewLowReached Price Time.UTCTime
+  = NewHighReached Coinbase.Price Time.UTCTime
+  | NewLowReached Coinbase.Price Time.UTCTime
   deriving stock (Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
@@ -95,14 +96,14 @@ data Swings
   deriving stock (Eq, Show, Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
-getLastPrice :: Swings -> Price
+getLastPrice :: Swings -> Coinbase.Price
 getLastPrice = \case
   SwingUp High{..}  -> price
   SwingDown Low{..} -> price
 
 data High
   = High
-      { price       :: Price
+      { price       :: Coinbase.Price
       , time        :: Time.UTCTime
       , previousLow :: Maybe Low
       }
@@ -111,7 +112,7 @@ data High
 
 data Low
   = Low
-      { price        :: Price
+      { price        :: Coinbase.Price
       , time         :: Time.UTCTime
       , previousHigh :: Maybe High
       }
@@ -144,7 +145,7 @@ instance Eventful.Eventful SwingEvent where
           SwingDown $ addNewLow price time high
 
 
-addNewHigh :: Price -> Time.UTCTime -> Low -> High
+addNewHigh :: Coinbase.Price -> Time.UTCTime -> Low -> High
 addNewHigh newHighPrice time low@Low{previousHigh}
   = case previousHigh of
       Nothing ->
@@ -159,7 +160,7 @@ addNewHigh newHighPrice time low@Low{previousHigh}
           (addNewHigh newHighPrice time)
           (previousLow high)
 
-addNewLow :: Price -> Time.UTCTime -> High -> Low
+addNewLow :: Coinbase.Price -> Time.UTCTime -> High -> Low
 addNewLow newLowPrice time high@High{previousLow}
   = case previousLow of
       Nothing ->

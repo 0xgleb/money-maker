@@ -14,13 +14,14 @@ module MoneyMaker.Coinbase.SDK.Websockets
   )
   where
 
+import MoneyMaker.Coinbase.SDK.Model
+
 import Protolude
 
 import qualified Control.Monad.Fail as Fail
 import           Data.Aeson         ((.:), (.=))
 import qualified Data.Aeson         as Aeson
 import qualified Data.Fixed         as Fixed
-import qualified Data.Text          as Txt
 import qualified Data.Time.Clock    as Time
 import qualified Network.WebSockets as WS
 
@@ -100,33 +101,6 @@ instance Aeson.ToJSON SubscribeMessage where
     , "channels" .= channels
     , "type" .= ("subscribe" :: Text)
     ]
-
-data TradingPair
-  = TradingPair
-      { baseCurrency  :: Currency
-      , quoteCurrency :: Currency
-      }
-  deriving stock (Eq, Show)
-
-instance Aeson.ToJSON TradingPair where
-  toJSON TradingPair{..}
-    = Aeson.String $ show baseCurrency <> "-" <> show quoteCurrency
-
-instance Aeson.FromJSON TradingPair where
-  parseJSON = Aeson.withText "TradingPair" $ \text -> do
-    let [baseCoin, quoteCoin] = Txt.splitOn "-" text
-    case (readMaybe $ toS baseCoin, readMaybe $ toS quoteCoin) of
-      (Just baseCurrency, Just quoteCurrency) ->
-        pure TradingPair{..}
-      _ ->
-        Fail.fail $ "Invalid trading pair: " <> toS text
-
-data Currency
-  = ETH
-  | EUR
-  | USD
-  | BTC
-  deriving stock (Eq, Show, Read)
 
 data Channel
   = Level2Channel [TradingPair]

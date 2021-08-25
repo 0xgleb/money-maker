@@ -254,7 +254,8 @@ language_extensions:
   - StandaloneDeriving
   - TupleSections
   - TypeApplications
-  - TypeFamilyDependencies  # Implies: TypeFamilies
+  - TypeFamilies
+  - TypeFamilyDependencies  # Implies:
   - TypeInType  # Implies: DataKinds, KindSignatures, PolyKinds
   - TypeOperators  # Implies: ExplicitNamespaces
   - ViewPatterns
