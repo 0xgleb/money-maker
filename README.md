@@ -37,8 +37,10 @@ stack exec make-money
 ## Test
 
 ```bash
-stack test --fast --file-watch --test-arguments "--color"
+stack test --no-keep-going --fast --file-watch --test-arguments "--color"
 ```
+
+`--no-keep-going` stops tests from running as soon as one fails, `--fast` improves compilation time by disabling optimisations, `--file-watch` rebuilds and retests the project when a tracked file changes, and `--test-arguments "--color"` makes HSpec (the used testing library) print tests output with colors
 
 # Money Maker Roadmap
 

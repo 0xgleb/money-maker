@@ -18,13 +18,16 @@ import qualified MoneyMaker.Error as Error
 
 import Protolude
 
+import qualified Control.Monad.Fail      as Fail
 import qualified Data.Aeson              as Aeson
 import qualified Data.Time.Clock         as Time
+import qualified Data.Vector             as Vector
 import qualified Network.HTTP.Client     as Network
 import qualified Network.HTTP.Client.TLS as Network.TLS
 import           Servant.API             ((:>))
 import qualified Servant.API             as Servant
 import qualified Servant.Client          as Servant
+import qualified Timestamp
 
 class Error.MonadUltraError m => CoinbaseRestAPI m where
   getCandles
@@ -37,7 +40,7 @@ class Error.MonadUltraError m => CoinbaseRestAPI m where
 
 newtype SandboxCoinbaseRestT (m :: [Type] -> Type -> Type) (errors :: [Type]) (a :: Type)
   = SandboxCoinbaseRestT { runSandboxCoinbaseRestT :: m errors a }
-  deriving newtype (Functor, Applicative, Monad, Error.MonadUltraError)
+  deriving newtype (Functor, Applicative, Monad, MonadIO, Error.MonadUltraError)
 
 instance
   ( Error.MonadUltraError m
@@ -46,6 +49,7 @@ instance
   where
     getCandles productId startTime endTime granularity
       = SandboxCoinbaseRestT $ getSandboxCandles productId
+          (Just $ UserAgentHeader "Haskell: servant-client")
           (Just startTime)
           (Just endTime)
           (Just granularity)
@@ -56,6 +60,7 @@ getSandboxCandles
      , MonadIO (m errors)
      )
   => TradingPair
+  -> Maybe UserAgentHeader
   -> Maybe Time.UTCTime
   -> Maybe Time.UTCTime
   -> Maybe Granularity
@@ -97,23 +102,15 @@ api = Proxy
 
 type API
   = "products" :> Servant.Capture "product-id" TradingPair :> "candles"
+  :> Servant.Header "User-Agent" UserAgentHeader
   :> Servant.QueryParam "start" Time.UTCTime
   :> Servant.QueryParam "end" Time.UTCTime
   :> Servant.QueryParam "granularity" Granularity
   :> Servant.Get '[Servant.JSON] [Candle]
 
--- TODO: add a custom JSON instance
-data Candle
-  = Candle
-      { time  :: Time.UTCTime
-      , low   :: Price
-      , high  :: Price
-      , open  :: Price
-      , close :: Price
-      -- , volume :: Volume
-      }
-  deriving stock (Generic)
-  deriving anyclass (Aeson.FromJSON)
+newtype UserAgentHeader
+  = UserAgentHeader Text
+  deriving newtype (Servant.ToHttpApiData)
 
 data Granularity
   = OneMinute -- ^ 60
@@ -131,3 +128,38 @@ instance Servant.ToHttpApiData Granularity where
     OneHour        -> "3600"
     SixHours       -> "21600"
     OneDay         -> "86400"
+
+-- TODO: add a custom JSON instance
+data Candle
+  = Candle
+      { time  :: Time.UTCTime
+      , low   :: Price
+      , high  :: Price
+      , open  :: Price
+      , close :: Price
+      -- , volume :: Volume
+      }
+  deriving stock (Generic, Show, Eq)
+
+instance Aeson.FromJSON Candle where
+  parseJSON
+    = Aeson.withArray "Candle" $ \array -> do
+        when (Vector.length array /= 6)
+          $ Fail.fail $ "Invalid candle array: " <> show array
+
+        let jsonTime  = Vector.head array
+            jsonLow   = Vector.head $ Vector.tail array
+            jsonHigh  = Vector.head $ Vector.tail $ Vector.tail array
+            jsonOpen  = Vector.head $ Vector.tail $ Vector.tail $ Vector.tail array
+            jsonClose = Vector.head $ Vector.tail $ Vector.tail $ Vector.tail $ Vector.tail array
+
+        time <-
+          Timestamp.timestampUtcTime . Timestamp.Timestamp
+            <$> Aeson.parseJSON jsonTime
+
+        low   <- Price <$> Aeson.parseJSON jsonLow
+        high  <- Price <$> Aeson.parseJSON jsonHigh
+        open  <- Price <$> Aeson.parseJSON jsonOpen
+        close <- Price <$> Aeson.parseJSON jsonClose
+
+        pure Candle{..}

@@ -2,10 +2,10 @@ module Main where
 
 import Environment
 
-import qualified MoneyMaker.Coinbase.SDK.Websockets as Coinbase
-import qualified MoneyMaker.Error                   as Error
-import qualified MoneyMaker.Eventful                as Eventful
-import qualified MoneyMaker.PricePreprocessor       as Preprocessor
+import qualified MoneyMaker.Coinbase.SDK      as Coinbase
+import qualified MoneyMaker.Error             as Error
+import qualified MoneyMaker.Eventful          as Eventful
+import qualified MoneyMaker.PricePreprocessor as Preprocessor
 
 import Protolude
 
@@ -14,42 +14,58 @@ import qualified Control.Monad.Logger        as Logger
 import qualified Data.Aeson                  as Aeson
 import qualified Data.Pool                   as Pool
 import qualified Data.Text.Lazy.IO           as Txt.LIO
+import qualified Data.Time.Calendar          as Time
+import qualified Data.Time.Clock             as Time
 import qualified Database.Persist.Postgresql as Postgres
 import qualified Database.Persist.Sql        as Persist
 import qualified Paths_exe                   as Path
 import qualified Prelude
+import qualified Servant.Client              as Servant
 import qualified System.IO                   as IO
 import qualified System.Process              as Proc
 import qualified Wuss
 
 main :: IO ()
 main = do
-  Environment{..} <- getEnvironment
+  Time.UTCTime{..} <- Time.getCurrentTime
 
-  when (mode == ProdMode)
-    $ Prelude.error "Prod is NOT READY!"
+  Error.runUltraExceptTWithoutErrors $ Coinbase.runSandboxCoinbaseRestT
+    $ Error.handleAllErrors @'[Servant.ClientError]
+        ( print =<< Coinbase.getCandles
+            (Coinbase.TradingPair Coinbase.BTC Coinbase.USD)
+            (Time.UTCTime (Time.addDays (-1) utctDay) utctDayTime)
+            Time.UTCTime{..}
+            Coinbase.OneHour
+        )
+        print
 
-  IO.hSetBuffering IO.stdin IO.NoBuffering -- we only need this for testing with getLine
-  IO.hSetBuffering IO.stdout IO.NoBuffering -- we only need this for testing with getLine
+  when False $ do
+    Environment{..} <- getEnvironment
 
-  (priceDataQueue, predictionQueue) <- spawnPredictionProcessAndBindToQueues
+    when (mode == ProdMode)
+      $ Prelude.error "Prod is NOT READY!"
 
-  let connectionString
-        =  "host=localhost user=" <> user
-        <> " dbname=" <> dbName
-        <> " password=" <> password
+    IO.hSetBuffering IO.stdin IO.NoBuffering -- we only need this for testing with getLine
+    IO.hSetBuffering IO.stdout IO.NoBuffering -- we only need this for testing with getLine
 
-  Logger.runNoLoggingT
-    $ Postgres.withPostgresqlPool connectionString 2
-    $ \connectionPool -> liftIO $ do
-        Pool.withResource connectionPool
-          $ runReaderT $ Persist.runMigration Eventful.migrateAll
+    (priceDataQueue, predictionQueue) <- spawnPredictionProcessAndBindToQueues
 
-        void $ forkIO $ getLivePriceData connectionPool mode priceDataQueue
+    let connectionString
+          =  "host=localhost user=" <> user
+          <> " dbname=" <> dbName
+          <> " password=" <> password
 
-        void $ forever $ do
-          prediction <- STM.atomically $ STM.readTQueue predictionQueue
-          handlePrediction prediction
+    Logger.runNoLoggingT
+      $ Postgres.withPostgresqlPool connectionString 2
+      $ \connectionPool -> liftIO $ do
+          Pool.withResource connectionPool
+            $ runReaderT $ Persist.runMigration Eventful.migrateAll
+
+          void $ forkIO $ getLivePriceData connectionPool mode priceDataQueue
+
+          void $ forever $ do
+            prediction <- STM.atomically $ STM.readTQueue predictionQueue
+            handlePrediction prediction
 
   where
     -- placeholder for the function that will get live price data from the
