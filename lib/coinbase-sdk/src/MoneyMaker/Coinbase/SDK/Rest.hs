@@ -16,12 +16,12 @@ import MoneyMaker.Coinbase.SDK.Model
 
 import qualified MoneyMaker.Error as Error
 
+import Data.Vector ((!?))
 import Protolude
 
 import qualified Control.Monad.Fail      as Fail
 import qualified Data.Aeson              as Aeson
 import qualified Data.Time.Clock         as Time
-import qualified Data.Vector             as Vector
 import qualified Network.HTTP.Client     as Network
 import qualified Network.HTTP.Client.TLS as Network.TLS
 import           Servant.API             ((:>))
@@ -142,17 +142,9 @@ data Candle
   deriving stock (Generic, Show, Eq)
 
 instance Aeson.FromJSON Candle where
-  parseJSON
-    = Aeson.withArray "Candle" $ \array -> do
-        when (Vector.length array /= 6)
-          $ Fail.fail $ "Invalid candle array: " <> show array
-
-        let jsonTime  = Vector.head array
-            jsonLow   = Vector.head $ Vector.tail array
-            jsonHigh  = Vector.head $ Vector.tail $ Vector.tail array
-            jsonOpen  = Vector.head $ Vector.tail $ Vector.tail $ Vector.tail array
-            jsonClose = Vector.head $ Vector.tail $ Vector.tail $ Vector.tail $ Vector.tail array
-
+  parseJSON = Aeson.withArray "Candle" $ \array ->
+    case (array !? 0, array !? 1, array !? 2, array !? 3, array !? 4) of
+      (Just jsonTime, Just jsonLow, Just jsonHigh, Just jsonOpen, Just jsonClose) -> do
         time <-
           Timestamp.timestampUtcTime . Timestamp.Timestamp
             <$> Aeson.parseJSON jsonTime
@@ -163,3 +155,5 @@ instance Aeson.FromJSON Candle where
         close <- Price <$> Aeson.parseJSON jsonClose
 
         pure Candle{..}
+
+      _ -> Fail.fail $ "Invalid candle array: " <> show array
