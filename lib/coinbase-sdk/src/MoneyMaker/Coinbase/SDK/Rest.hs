@@ -113,12 +113,12 @@ newtype UserAgentHeader
   deriving newtype (Servant.ToHttpApiData)
 
 data Granularity
-  = OneMinute -- ^ 60
-  | FiveMinutes -- ^ 300
+  = OneMinute      -- ^ 60
+  | FiveMinutes    -- ^ 300
   | FifteenMinutes -- ^ 900
-  | OneHour -- ^ 3600
-  | SixHours -- ^ 21600
-  | OneDay -- ^ 86400
+  | OneHour        -- ^ 3600
+  | SixHours       -- ^ 21600
+  | OneDay         -- ^ 86400
 
 instance Servant.ToHttpApiData Granularity where
   toUrlPiece = \case
@@ -129,7 +129,6 @@ instance Servant.ToHttpApiData Granularity where
     SixHours       -> "21600"
     OneDay         -> "86400"
 
--- TODO: add a custom JSON instance
 data Candle
   = Candle
       { time  :: Time.UTCTime
