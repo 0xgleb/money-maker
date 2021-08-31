@@ -8,6 +8,7 @@ dependencies:
 - money-maker-eventful
 - base
 - aeson
+- generic-lens
 - protolude
 - time
 
