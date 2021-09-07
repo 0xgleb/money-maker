@@ -9,28 +9,22 @@ module MoneyMaker.Coinbase.SDK.Rest
   , SandboxCoinbaseRestT(..)
 
   , Granularity(..)
-
-  , Candle(..)
-  , consolidateCandles
   )
   where
 
-import MoneyMaker.Coinbase.SDK.Model
+import MoneyMaker.Coinbase.SDK.Contract
 
 import qualified MoneyMaker.Error as Error
 
-import Data.Vector ((!?))
 import Protolude
 
-import qualified Control.Monad.Fail      as Fail
-import qualified Data.Aeson              as Aeson
 import qualified Data.Time.Clock         as Time
 import qualified Network.HTTP.Client     as Network
 import qualified Network.HTTP.Client.TLS as Network.TLS
 import           Servant.API             ((:>))
 import qualified Servant.API             as Servant
 import qualified Servant.Client          as Servant
-import qualified Timestamp
+
 
 class Error.MonadUltraError m => CoinbaseRestAPI m where
   getCandles
@@ -138,52 +132,3 @@ instance Servant.ToHttpApiData Granularity where
     OneHour        -> "3600"
     SixHours       -> "21600"
     OneDay         -> "86400"
-
-data Candle
-  = Candle
-      { time  :: Time.UTCTime
-      , low   :: Price
-      , high  :: Price
-      , open  :: Price
-      , close :: Price
-      -- , volume :: Volume
-      }
-  deriving stock (Generic, Show, Eq)
-
-instance Aeson.FromJSON Candle where
-  parseJSON = Aeson.withArray "Candle" $ \array ->
-    case (array !? 0, array !? 1, array !? 2, array !? 3, array !? 4) of
-      (Just jsonTime, Just jsonLow, Just jsonHigh, Just jsonOpen, Just jsonClose) -> do
-        time <-
-          Timestamp.timestampUtcTime . Timestamp.Timestamp
-            <$> Aeson.parseJSON jsonTime
-
-        low   <- Price <$> Aeson.parseJSON jsonLow
-        high  <- Price <$> Aeson.parseJSON jsonHigh
-        open  <- Price <$> Aeson.parseJSON jsonOpen
-        close <- Price <$> Aeson.parseJSON jsonClose
-
-        pure Candle{..}
-
-      _ -> Fail.fail $ "Invalid candle array: " <> show array
-
-
-consolidateCandles :: [Candle] -> Maybe Candle
-consolidateCandles
-  = flip foldl Nothing $ \consolidatedCandle nextCandle ->
-      case consolidatedCandle of
-        Nothing -> Just nextCandle
-        Just consolidated@Candle{time} ->
-          Just Candle
-            { low =
-                if low nextCandle < low consolidated
-                then low nextCandle
-                else low consolidated
-            , high =
-                if high nextCandle > high consolidated
-                then high nextCandle
-                else high consolidated
-            , open  = open consolidated
-            , close = close nextCandle
-            , time
-            }

@@ -14,7 +14,7 @@ module MoneyMaker.Coinbase.SDK.Websockets
   )
   where
 
-import MoneyMaker.Coinbase.SDK.Model
+import MoneyMaker.Coinbase.SDK.Contract
 
 import Protolude
 

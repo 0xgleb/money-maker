@@ -3,7 +3,7 @@ module MoneyMaker.Coinbase.SDK.WebsocketsSpec
   )
   where
 
-import MoneyMaker.Coinbase.SDK.Model
+import MoneyMaker.Coinbase.SDK.Contract
 import MoneyMaker.Coinbase.SDK.Websockets
 
 import qualified Data.Aeson         as Aeson

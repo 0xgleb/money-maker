@@ -1,23 +1,32 @@
-module MoneyMaker.Coinbase.SDK.RestSpec
+module MoneyMaker.Coinbase.SDK.ContractSpec
   ( spec
   )
   where
 
-import MoneyMaker.Coinbase.SDK.Model
-import MoneyMaker.Coinbase.SDK.Rest
+import MoneyMaker.Coinbase.SDK.Contract
+
+import Protolude
 
 import qualified Data.Aeson    as Aeson
 import qualified Data.Aeson.QQ as Aeson
-import           Protolude
 import qualified Timestamp
 
 import Test.Hspec
+import Test.QuickCheck
 
 spec :: Spec
 spec = do
   describe "FromJSON Candle" $ do
     it "can decode candle data" $ do
       Aeson.fromJSON sampleCandlesJSON `shouldBe` Aeson.Success sampleCandles
+
+  describe "TradingPair JSON encodings" $ do
+    it "can decode BTC-USD" $ do
+      Aeson.decode "\"BTC-USD\"" `shouldBe` Just (TradingPair BTC USD)
+
+    it "holds property decode . encode === Just . identity"
+      $ property $ \pair ->
+        Aeson.decode (Aeson.encode @TradingPair pair) == Just pair
 
 sampleCandles :: [Candle]
 sampleCandles =
