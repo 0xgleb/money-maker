@@ -207,7 +207,8 @@ handleAllErrors
 
 -- | handleAllErrors' method allows us to provide error handling functions for every single error
 -- one by one until we have no errors left
-class MonadUltraError m
+class
+  MonadUltraError m
   => ErrorHandler (errors :: [Type]) (m :: [Type] -> Type -> Type) (a :: Type) (result :: Type)
   | errors m a -> result
   where

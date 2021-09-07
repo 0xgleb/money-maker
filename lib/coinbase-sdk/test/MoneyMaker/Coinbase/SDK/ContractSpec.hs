@@ -26,7 +26,7 @@ spec = do
 
     it "holds property decode . encode === Just . identity"
       $ property $ \pair ->
-        Aeson.decode (Aeson.encode @TradingPair pair) == Just pair
+          Aeson.decode (Aeson.encode @TradingPair pair) == Just pair
 
 sampleCandles :: [Candle]
 sampleCandles =

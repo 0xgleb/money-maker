@@ -58,6 +58,39 @@ instance
           (Just endTime)
           (Just granularity)
 
+
+newtype UserAgentHeader
+  = UserAgentHeader Text
+  deriving newtype (Servant.ToHttpApiData)
+
+data Granularity
+  = OneMinute      -- ^ 60
+  | FiveMinutes    -- ^ 300
+  | FifteenMinutes -- ^ 900
+  | OneHour        -- ^ 3600
+  | SixHours       -- ^ 21600
+  | OneDay         -- ^ 86400
+
+instance Servant.ToHttpApiData Granularity where
+  toUrlPiece = \case
+    OneMinute      -> "60"
+    FiveMinutes    -> "300"
+    FifteenMinutes -> "900"
+    OneHour        -> "3600"
+    SixHours       -> "21600"
+    OneDay         -> "86400"
+
+api :: Proxy API
+api = Proxy
+
+type API
+  = "products" :> Servant.Capture "product-id" TradingPair :> "candles"
+  :> Servant.Header "User-Agent" UserAgentHeader
+  :> Servant.QueryParam "start" Time.UTCTime
+  :> Servant.QueryParam "end" Time.UTCTime
+  :> Servant.QueryParam "granularity" Granularity
+  :> Servant.Get '[Servant.JSON] [Candle]
+
 getSandboxCandles
   :: ( Error.MonadUltraError m
      , Servant.ClientError `Error.Elem` errors
@@ -100,35 +133,3 @@ getSandboxCandles
           Error.throwUltraError clientError
         Right success ->
           pure success
-
-api :: Proxy API
-api = Proxy
-
-type API
-  = "products" :> Servant.Capture "product-id" TradingPair :> "candles"
-  :> Servant.Header "User-Agent" UserAgentHeader
-  :> Servant.QueryParam "start" Time.UTCTime
-  :> Servant.QueryParam "end" Time.UTCTime
-  :> Servant.QueryParam "granularity" Granularity
-  :> Servant.Get '[Servant.JSON] [Candle]
-
-newtype UserAgentHeader
-  = UserAgentHeader Text
-  deriving newtype (Servant.ToHttpApiData)
-
-data Granularity
-  = OneMinute      -- ^ 60
-  | FiveMinutes    -- ^ 300
-  | FifteenMinutes -- ^ 900
-  | OneHour        -- ^ 3600
-  | SixHours       -- ^ 21600
-  | OneDay         -- ^ 86400
-
-instance Servant.ToHttpApiData Granularity where
-  toUrlPiece = \case
-    OneMinute      -> "60"
-    FiveMinutes    -> "300"
-    FifteenMinutes -> "900"
-    OneHour        -> "3600"
-    SixHours       -> "21600"
-    OneDay         -> "86400"

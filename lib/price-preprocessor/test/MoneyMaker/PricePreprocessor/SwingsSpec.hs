@@ -1,4 +1,4 @@
-module MoneyMaker.PricePreprocessorSpec
+module MoneyMaker.PricePreprocessor.SwingsSpec
   ( spec
   )
   where
