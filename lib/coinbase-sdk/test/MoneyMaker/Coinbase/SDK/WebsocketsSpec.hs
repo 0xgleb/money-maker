@@ -3,6 +3,7 @@ module MoneyMaker.Coinbase.SDK.WebsocketsSpec
   )
   where
 
+import MoneyMaker.Coinbase.SDK.Contract
 import MoneyMaker.Coinbase.SDK.Websockets
 
 import qualified Data.Aeson         as Aeson
@@ -28,7 +29,7 @@ sampleTickerMessage :: CoinbaseMessage
 sampleTickerMessage
   = Ticker TickerPriceData
       { productId = TradingPair BTC USD
-      , price = 41438.8
+      , price = Price 41438.8
       , time
           = Time.UTCTime
               (Time.fromGregorian 2021 07 31)

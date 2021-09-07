@@ -8,6 +8,7 @@ module MoneyMaker.Eventful.EventStore.Persistent
 
   , SqlEventStoreT(..)
   , runSqlEventStoreT
+  , runSqlEventStoreTWithoutErrors
   )
   where
 
@@ -56,7 +57,13 @@ newtype SqlEventStoreT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
       { getSqlEventStoreT
           :: ReaderT Persist.ConnectionPool (UltraExceptT m errors) a
       }
-  deriving newtype (Functor, Applicative, Monad, MonadReader Persist.ConnectionPool, MonadIO)
+  deriving newtype
+    ( Functor
+    , Applicative
+    , Monad
+    , MonadReader Persist.ConnectionPool
+    , MonadIO
+    )
 
 runSqlEventStoreT
   :: forall errors m a
@@ -66,6 +73,15 @@ runSqlEventStoreT
 
 runSqlEventStoreT connectionPool (SqlEventStoreT action)
   = runUltraExceptT $ runReaderT action connectionPool
+
+runSqlEventStoreTWithoutErrors
+  :: Monad m
+  => Persist.ConnectionPool
+  -> SqlEventStoreT m '[] a
+  -> m a
+
+runSqlEventStoreTWithoutErrors connectionPool (SqlEventStoreT action)
+  = runUltraExceptTWithoutErrors $ runReaderT action connectionPool
 
 instance Monad m => MonadUltraError (SqlEventStoreT m) where
   throwUltraError = SqlEventStoreT . lift . throwUltraError
@@ -112,6 +128,7 @@ getAggregateWithSql (_ :: Proxy event) (Id uuid) = do
   connectionPool <- ask
 
   decodedEvents <- liftIO $ flip Persist.runSqlPool connectionPool $ do
+    -- TODO: add caching
     rawEvents <-
       fmap Persist.entityVal
         <$> Persist.selectList [EventAggregate_id ==. UUID.toText uuid] []

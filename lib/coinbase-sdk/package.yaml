@@ -3,12 +3,21 @@ version:             0.1.0.0
 license:             BSD3
 
 dependencies:
+- money-maker-error
 - base
+- QuickCheck
 - aeson
+- generic-arbitrary
+- http-client
+- http-client-tls
 - protolude
+- servant
+- servant-client
 - stm
 - text
 - time
+- timestamp
+- vector
 - websockets
 
 library:
@@ -48,6 +57,7 @@ default-extensions:
 - RecordWildCards  # Implies: DisambiguateRecordFields
 - ScopedTypeVariables  # Implies: ExplicitForAll
 - StandaloneDeriving
+- StandaloneKindSignatures
 - TupleSections
 - TypeApplications
 - TypeFamilyDependencies  # Implies: TypeFamilies
@@ -81,4 +91,3 @@ tests:
     - hspec
     - hspec-expectations-json
     - aeson-qq
-    - QuickCheck
