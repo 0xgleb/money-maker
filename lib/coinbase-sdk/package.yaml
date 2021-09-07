@@ -55,6 +55,7 @@ default-extensions:
 - RecordWildCards  # Implies: DisambiguateRecordFields
 - ScopedTypeVariables  # Implies: ExplicitForAll
 - StandaloneDeriving
+- StandaloneKindSignatures
 - TupleSections
 - TypeApplications
 - TypeFamilyDependencies  # Implies: TypeFamilies

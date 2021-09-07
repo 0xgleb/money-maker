@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE StrictData            #-}
 {-# LANGUAGE UndecidableInstances  #-}
 
 module MoneyMaker.Coinbase.SDK.Rest
@@ -7,8 +8,10 @@ module MoneyMaker.Coinbase.SDK.Rest
 
   , SandboxCoinbaseRestT(..)
 
-  , Candle(..)
   , Granularity(..)
+
+  , Candle(..)
+  , consolidateCandles
   )
   where
 
@@ -38,7 +41,14 @@ class Error.MonadUltraError m => CoinbaseRestAPI m where
     -> Granularity
     -> m errors [Candle]
 
-newtype SandboxCoinbaseRestT (m :: [Type] -> Type -> Type) (errors :: [Type]) (a :: Type)
+
+type SandboxCoinbaseRestT
+  :: ([Type] -> Type -> Type)
+  -> [Type]
+  -> Type
+  -> Type
+
+newtype SandboxCoinbaseRestT m errors a
   = SandboxCoinbaseRestT { runSandboxCoinbaseRestT :: m errors a }
   deriving newtype (Functor, Applicative, Monad, MonadIO, Error.MonadUltraError)
 
@@ -156,3 +166,24 @@ instance Aeson.FromJSON Candle where
         pure Candle{..}
 
       _ -> Fail.fail $ "Invalid candle array: " <> show array
+
+
+consolidateCandles :: [Candle] -> Maybe Candle
+consolidateCandles
+  = flip foldl Nothing $ \consolidatedCandle nextCandle ->
+      case consolidatedCandle of
+        Nothing -> Just nextCandle
+        Just consolidated@Candle{time} ->
+          Just Candle
+            { low =
+                if low nextCandle < low consolidated
+                then low nextCandle
+                else low consolidated
+            , high =
+                if high nextCandle > high consolidated
+                then high nextCandle
+                else high consolidated
+            , open  = open consolidated
+            , close = close nextCandle
+            , time
+            }

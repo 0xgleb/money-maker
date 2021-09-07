@@ -21,7 +21,6 @@ import Protolude
 import qualified Control.Monad.Fail as Fail
 import           Data.Aeson         ((.:), (.=))
 import qualified Data.Aeson         as Aeson
-import qualified Data.Fixed         as Fixed
 import qualified Data.Time.Clock    as Time
 import qualified Network.WebSockets as WS
 
@@ -56,7 +55,7 @@ data CoinbaseMessage
 data TickerPriceData
   = TickerPriceData
       { productId :: TradingPair
-      , price     :: Fixed.Centi
+      , price     :: Price
       , time      :: Time.UTCTime
       }
   deriving stock (Eq, Show)

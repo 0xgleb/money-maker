@@ -1,3 +1,5 @@
+{-# LANGUAGE StrictData #-}
+
 module MoneyMaker.Coinbase.SDK.Model
   ( Price(..)
   , Currency(..)
@@ -13,9 +15,11 @@ import qualified Data.Fixed         as Fixed
 import qualified Data.Text          as Txt
 import qualified Servant.API        as Servant
 
+-- TODO: this price type is only good for BTC/USD trading pair
+-- most coins (that are not USD) can have more than 2 decimal places
 newtype Price
   = Price { getPrice :: Fixed.Centi }
-  deriving newtype (Show, Eq, Ord, Aeson.ToJSON, Aeson.FromJSON)
+  deriving newtype (Show, Read, Eq, Ord, Aeson.ToJSON, Aeson.FromJSON)
 
 data Currency
   = BTC

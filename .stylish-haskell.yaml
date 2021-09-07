@@ -252,6 +252,7 @@ language_extensions:
   - RecordWildCards  # Implies: DisambiguateRecordFields
   - ScopedTypeVariables  # Implies: ExplicitForAll
   - StandaloneDeriving
+  - StandaloneKindSignatures
   - TupleSections
   - TypeApplications
   - TypeFamilies
