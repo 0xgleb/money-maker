@@ -9,7 +9,7 @@ import Protolude
 
 import qualified Data.Aeson    as Aeson
 import qualified Data.Aeson.QQ as Aeson
-import qualified Timestamp
+import qualified Data.Time     as Time
 
 import Test.Hspec
 import Test.QuickCheck
@@ -28,24 +28,29 @@ spec = do
       $ property $ \pair ->
           Aeson.decode (Aeson.encode @TradingPair pair) == Just pair
 
+utcTimeFromHour :: Time.DiffTime -> Time.UTCTime
+utcTimeFromHour hour
+  = Time.UTCTime (Time.fromGregorian 2021 8 30)
+  $ hour * 60 * 60
+
 sampleCandles :: [Candle]
 sampleCandles =
   [ Candle
-      { time  = Timestamp.timestampUtcTime $ Timestamp.Timestamp 1630357200
+      { time  = utcTimeFromHour 21
       , low   = Price 48206.23
       , high  = Price 48737.6
       , open  = Price 48669.93
       , close = Price 48413.23
       }
   , Candle
-      { time  = Timestamp.timestampUtcTime $ Timestamp.Timestamp 1630353600
+      { time  = utcTimeFromHour 20
       , low   = Price 48559.71
       , high  = Price 48737.6
       , open  = Price 48644.01
       , close = Price 48669.91
       }
   , Candle
-      { time  = Timestamp.timestampUtcTime $ Timestamp.Timestamp 1630350000
+      { time  = utcTimeFromHour 19
       , low   = Price 48393.99
       , high  = Price 48644.01
       , open  = Price 48520.02

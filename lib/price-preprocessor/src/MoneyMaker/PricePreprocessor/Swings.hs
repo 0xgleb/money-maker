@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE StrictData     #-}
 
 module MoneyMaker.PricePreprocessor.Swings
   ( SwingCommand(..)
@@ -21,15 +22,15 @@ import qualified Data.Aeson      as Aeson
 import qualified Data.Time.Clock as Time
 
 data SwingCommand
-  = AddNewPrice Coinbase.Price Time.UTCTime
+  = AddNewPrice TimedPrice
 
 instance Eventful.Command SwingCommand SwingEvent where
   type CommandErrors SwingCommand = '[]
 
-  handleCommand _id Nothing (AddNewPrice price time)
+  handleCommand _id Nothing (AddNewPrice TimedPrice{..})
     = pure $ NewLowReached price time :| []
 
-  handleCommand _id (Just swings) (AddNewPrice newPrice time)
+  handleCommand _id (Just swings) (AddNewPrice TimedPrice{ price = newPrice, ..})
     = let previousPrice = case swings of
             SwingUp   High{price} -> price
             SwingDown Low{price}  -> price
@@ -82,7 +83,7 @@ data Low
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
 instance Eventful.Eventful SwingEvent where
-  type EventName      SwingEvent = "swing"
+  type EventName      SwingEvent = "swings"
   type EventAggregate SwingEvent = Swings
   type EventError     SwingEvent = Void
 

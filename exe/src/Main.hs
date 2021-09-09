@@ -25,18 +25,27 @@ import qualified System.IO                   as IO
 import qualified System.Process              as Proc
 import qualified Wuss
 
+deriving newtype instance Eventful.MonadEventStore m
+  => Eventful.MonadEventStore (Coinbase.SandboxCoinbaseRestT m)
+
 main :: IO ()
 main = do
   Time.UTCTime{..} <- Time.getCurrentTime
 
   Error.runUltraExceptTWithoutErrors $ Coinbase.runSandboxCoinbaseRestT
-    $ Error.handleAllErrors @'[Servant.ClientError]
+    $ Error.handleAllErrors
+        @'[Coinbase.ServantClientError, Coinbase.HeaderError]
         ( print =<< Coinbase.getCandles
             (Coinbase.TradingPair Coinbase.BTC Coinbase.USD)
-            (Time.UTCTime (Time.addDays (-1) utctDay) utctDayTime)
-            Time.UTCTime{..}
-            Coinbase.OneHour
+            Nothing
+            Nothing
+            -- (Just (Time.UTCTime utctDay utctDayTime))
+            -- (Just Time.UTCTime{..})
+            -- (Time.UTCTime (Time.fromGregorian 2019 12 2) 0)
+            -- (Time.UTCTime (Time.fromGregorian 2019 12 5) 0)
+            Coinbase.OneDay
         )
+        print
         print
 
   when False $ do
@@ -84,13 +93,27 @@ main = do
       Wuss.runSecureClient websocketHost 443 "/"
         $ Coinbase.websocketsClient $ \newPriceData ->
             Eventful.runSqlEventStoreTWithoutErrors connectionPool
-              $ Error.handleAllErrors @'[Eventful.NoEventsFoundError, Eventful.CouldntDecodeEventError]
+              $ Coinbase.runSandboxCoinbaseRestT
+              $ Error.handleAllErrors
+                  @'[ Eventful.NoEventsFoundError
+                    , Eventful.CouldntDecodeEventError
+                    , Preprocessor.NoNewCandlesFoundAfterAMinuteError
+                    , Coinbase.ServantClientError
+                    , Coinbase.HeaderError
+                    ]
                   (processPriceData priceDataQueue newPriceData)
 
                   (\Eventful.NoEventsFoundError -> putStrLn @Text "No events found")
 
                   (\(Eventful.CouldntDecodeEventError err) ->
                     putStrLn $ "Couldn't decode event error: " <> err)
+
+                  (print @_ @Preprocessor.NoNewCandlesFoundAfterAMinuteError)
+
+                  (print @_ @Coinbase.ServantClientError)
+
+                  (print @_ @Coinbase.HeaderError)
+
 
     processPriceData priceDataQueue newPriceData = do
       priceData <- Preprocessor.toContractualPriceData newPriceData

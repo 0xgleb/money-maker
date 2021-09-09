@@ -6,8 +6,12 @@
 module MoneyMaker.Coinbase.SDK.Rest
   ( CoinbaseRestAPI(..)
 
+  , ServantClientError(..)
+  , HeaderError(..)
+
   , SandboxCoinbaseRestT(..)
 
+  , PaginationId(..)
   , Granularity(..)
   )
   where
@@ -18,6 +22,7 @@ import qualified MoneyMaker.Error as Error
 
 import Protolude
 
+import qualified Data.ByteString.Lazy    as BSL
 import qualified Data.Time.Clock         as Time
 import qualified Network.HTTP.Client     as Network
 import qualified Network.HTTP.Client.TLS as Network.TLS
@@ -26,12 +31,26 @@ import qualified Servant.API             as Servant
 import qualified Servant.Client          as Servant
 
 
+data ServantClientError
+  = FailureResponse ByteString
+  | DecodeFailure ByteString
+  | UnsupportedContentType ByteString
+  | InvalidContentTypeHeader ByteString
+  | ConnectionError
+  deriving stock (Show)
+
+data HeaderError
+  = MissingHeaderError
+  | UndecodableHeader ByteString
+  deriving stock (Show)
+
 class Error.MonadUltraError m => CoinbaseRestAPI m where
   getCandles
-    :: Servant.ClientError `Error.Elem` errors
+    :: ( ServantClientError `Error.Elem` errors
+       )
     => TradingPair
-    -> Time.UTCTime
-    -> Time.UTCTime
+    -> Maybe (Time.UTCTime)
+    -> Maybe (Time.UTCTime)
     -> Granularity
     -> m errors [Candle]
 
@@ -42,6 +61,7 @@ type SandboxCoinbaseRestT
   -> Type
   -> Type
 
+-- TODO: add the production version of the API
 newtype SandboxCoinbaseRestT m errors a
   = SandboxCoinbaseRestT { runSandboxCoinbaseRestT :: m errors a }
   deriving newtype (Functor, Applicative, Monad, MonadIO, Error.MonadUltraError)
@@ -52,11 +72,58 @@ instance
   ) => CoinbaseRestAPI (SandboxCoinbaseRestT m)
   where
     getCandles productId startTime endTime granularity
-      = SandboxCoinbaseRestT $ getSandboxCandles productId
-          (Just $ UserAgentHeader "Haskell: servant-client")
-          (Just startTime)
-          (Just endTime)
-          (Just granularity)
+      = SandboxCoinbaseRestT
+      $ Error.catchUltraError @Servant.ClientError getCandlesAction
+      $ \servantError -> Error.throwUltraError $ case servantError of
+          Servant.FailureResponse _request response ->
+            FailureResponse $ BSL.toStrict $ Servant.responseBody response
+
+          Servant.DecodeFailure _text response ->
+            DecodeFailure $ BSL.toStrict $ Servant.responseBody response
+
+          Servant.UnsupportedContentType _mediaType response ->
+            UnsupportedContentType $ BSL.toStrict $ Servant.responseBody response
+
+          Servant.InvalidContentTypeHeader response ->
+            InvalidContentTypeHeader $ BSL.toStrict $ Servant.responseBody response
+
+          Servant.ConnectionError _ ->
+            ConnectionError
+
+      where
+        getCandlesAction
+          = getSandboxCandles productId
+              (Just $ UserAgentHeader "Haskell: servant-client")
+              startTime
+              endTime
+              -- (Just startTime)
+              -- (Just endTime)
+              (Just granularity)
+
+        -- getCandlesAction = do
+        --   Servant.Headers{ ..} <-
+        --     getSandboxCandles productId
+        --       (Just $ UserAgentHeader "Haskell: servant-client")
+        --       afterPaginationId
+        --       startTime
+        --       endTime
+        --       -- (Just startTime)
+        --       -- (Just endTime)
+        --       (Just granularity)
+
+        --   let responseHeader = case getHeadersHList of
+        --         Servant.HCons responseHeader _ ->
+        --           responseHeader
+
+        --   paginationId <- case responseHeader of
+        --     Servant.Header paginationId ->
+        --       pure paginationId
+        --     Servant.MissingHeader ->
+        --       Error.throwUltraError MissingHeaderError
+        --     Servant.UndecodableHeader bytestring ->
+        --       Error.throwUltraError $ UndecodableHeader bytestring
+
+        --   pure (getResponse, paginationId)
 
 
 newtype UserAgentHeader
@@ -83,6 +150,10 @@ instance Servant.ToHttpApiData Granularity where
 api :: Proxy API
 api = Proxy
 
+newtype PaginationId
+  = PaginationId { getPaginationId :: Integer }
+  deriving newtype (Show, Servant.ToHttpApiData, Servant.FromHttpApiData)
+
 type API
   = "products" :> Servant.Capture "product-id" TradingPair :> "candles"
   :> Servant.Header "User-Agent" UserAgentHeader
@@ -90,6 +161,8 @@ type API
   :> Servant.QueryParam "end" Time.UTCTime
   :> Servant.QueryParam "granularity" Granularity
   :> Servant.Get '[Servant.JSON] [Candle]
+
+       -- (Servant.Headers '[Servant.Header "CB-AFTER" PaginationId] )
 
 getSandboxCandles
   :: ( Error.MonadUltraError m
@@ -102,6 +175,8 @@ getSandboxCandles
   -> Maybe Time.UTCTime
   -> Maybe Granularity
   -> m errors [Candle]
+
+  -- (Servant.Headers '[Servant.Header "CB-AFTER" PaginationId] [Candle])
 
 getSandboxCandles
   = Servant.hoistClient api naturalTransformation (Servant.client api)
@@ -120,6 +195,7 @@ getSandboxCandles
       let baseUrl = Servant.BaseUrl
             { baseUrlScheme = Servant.Https
             , baseUrlHost   = "api-public.sandbox.pro.coinbase.com"
+            -- , baseUrlHost   = "api.pro.coinbase.com"
             , baseUrlPort   = 443
             , baseUrlPath   = ""
             }

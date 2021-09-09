@@ -17,10 +17,10 @@ import qualified Data.Aeson                        as Aeson
 import qualified Data.Fixed                        as Fixed
 import qualified Data.Text                         as Txt
 import qualified Data.Time.Clock                   as Time
+import qualified Data.Time.Clock.POSIX             as Time
 import qualified Servant.API                       as Servant
 import qualified Test.QuickCheck                   as QC
 import qualified Test.QuickCheck.Arbitrary.Generic as QC
-import qualified Timestamp
 
 -- TODO: this price type is only good for BTC/USD trading pair
 -- most coins (that are not USD) can have more than 2 decimal places
@@ -84,8 +84,7 @@ instance Aeson.FromJSON Candle where
     case (array !? 0, array !? 1, array !? 2, array !? 3, array !? 4) of
       (Just jsonTime, Just jsonLow, Just jsonHigh, Just jsonOpen, Just jsonClose) -> do
         time <-
-          Timestamp.timestampUtcTime . Timestamp.Timestamp
-            <$> Aeson.parseJSON jsonTime
+          Time.posixSecondsToUTCTime <$> Aeson.parseJSON jsonTime
 
         low   <- Price <$> Aeson.parseJSON jsonLow
         high  <- Price <$> Aeson.parseJSON jsonHigh
@@ -95,24 +94,3 @@ instance Aeson.FromJSON Candle where
         pure Candle{..}
 
       _ -> Fail.fail $ "Invalid candle array: " <> show array
-
-
--- consolidateCandles :: [Candle] -> Maybe Candle
--- consolidateCandles
---   = flip foldl Nothing $ \consolidatedCandle nextCandle ->
---       case consolidatedCandle of
---         Nothing -> Just nextCandle
---         Just consolidated@Candle{time} ->
---           Just Candle
---             { low =
---                 if low nextCandle < low consolidated
---                 then low nextCandle
---                 else low consolidated
---             , high =
---                 if high nextCandle > high consolidated
---                 then high nextCandle
---                 else high consolidated
---             , open  = open consolidated
---             , close = close nextCandle
---             , time
---             }

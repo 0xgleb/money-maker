@@ -28,7 +28,7 @@ spec = do
             = fmap fst $ runIdentity $ Eventful.runInMemoryEventStoreT [] $ do
                 let id = Eventful.Id [Eventful.uuid|123e4567-e89b-12d3-a456-426614174000|]
 
-                _ <- forM prices $ Eventful.applyCommand id . uncurry AddNewPrice
+                _ <- forM prices $ Eventful.applyCommand id . AddNewPrice
 
                 Eventful.getAggregate @SwingEvent id
 
@@ -44,8 +44,10 @@ expectedAggregate
   $ High (Coinbase.Price 12) (mkTime 6) . Just
   $ Low (Coinbase.Price 1) (mkTime 1) Nothing
 
-prices :: [(Coinbase.Price, Time.UTCTime)]
-prices = zip priceValues (mkTime <$> [1..fromIntegral (length priceValues)])
+prices :: [TimedPrice]
+prices
+  = zipWith TimedPrice priceValues
+  $ mkTime <$> [1..fromIntegral (length priceValues)]
   where
     priceValues
       = Coinbase.Price <$> [1, 3, 2, 10, 7, 12, 8, 11, 4, 6, 5, 9]

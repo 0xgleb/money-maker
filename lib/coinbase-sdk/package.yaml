@@ -7,6 +7,7 @@ dependencies:
 - base
 - QuickCheck
 - aeson
+- bytestring
 - generic-arbitrary
 - http-client
 - http-client-tls
@@ -16,7 +17,6 @@ dependencies:
 - stm
 - text
 - time
-- timestamp
 - vector
 - websockets
 
