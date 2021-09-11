@@ -133,15 +133,13 @@ catchUpWithTheMarket productId currentTime = do
             (Just $ roundToGranularity granularity currentTime)
             (restrictedGranularityToCoinbaseGranularity granularity)
 
-  -- TODO: add recursion to fully catch up with the market
-
   let swingCommands
         = generateSwingCommands
             NoNewCandlesFoundError{..}
             savedSwings
             consolidatedCandles
 
-  case swingCommands of
+  newSwings <- case swingCommands of
     Left error ->
       Error.throwUltraError error
 
@@ -152,6 +150,20 @@ catchUpWithTheMarket productId currentTime = do
         (const $ Eventful.applyCommand swingsAggregateId)
         swings
         commands
+
+  case granularity of
+    OneMinute ->
+      -- The Coinbase API returns up to 300 candles per request. Because of
+      -- deriveGranularity, if we needed more than 300 OneMinute candles
+      -- we would request OneHour candles instead. So if the last request
+      -- that we did was in minutes then we don't need to get more candles
+      pure newSwings
+
+    OneHour ->
+      catchUpWithTheMarket productId currentTime
+
+    OneDay ->
+      catchUpWithTheMarket productId currentTime
 
 data RestrictedGranularity
   = OneMinute
