@@ -9,6 +9,7 @@ module MoneyMaker.PricePreprocessor
   , ContractualPrediction(..)
 
   , NoNewCandlesFoundError(..)
+  , RestrictedGranularity(..)
 
   , module Swings
 
@@ -90,7 +91,7 @@ toContractualPriceData Coinbase.TickerPriceData{ time = currentTime, ..} = do
 
 data NoNewCandlesFoundError
   = NoNewCandlesFoundError
-      { granularity :: Coinbase.Granularity
+      { granularity :: RestrictedGranularity
       , productId   :: Coinbase.TradingPair
       }
   deriving stock (Generic, Show, Eq)
@@ -130,7 +131,7 @@ catchUpWithTheMarket productId currentTime = do
       <$> Coinbase.getCandles productId
             (Just $ roundToGranularity granularity timeOfPreviousSave)
             (Just $ roundToGranularity granularity currentTime)
-            granularity
+            (restrictedGranularityToCoinbaseGranularity granularity)
 
   -- TODO: add recursion to fully catch up with the market
 
@@ -152,26 +153,58 @@ catchUpWithTheMarket productId currentTime = do
         swings
         commands
 
+data RestrictedGranularity
+  = OneMinute
+  | OneHour
+  | OneDay
+  deriving stock (Show, Generic, Eq)
 
-deriveGranularity :: Time.NominalDiffTime -> Coinbase.Granularity
+instance QC.Arbitrary RestrictedGranularity where
+  arbitrary = QC.genericArbitrary
+  shrink    = QC.genericShrink
+
+restrictedGranularityToCoinbaseGranularity
+  :: RestrictedGranularity
+  -> Coinbase.Granularity
+restrictedGranularityToCoinbaseGranularity = \case
+  OneMinute -> Coinbase.OneMinute
+  OneHour   -> Coinbase.OneHour
+  OneDay    -> Coinbase.OneDay
+
+deriveGranularity :: Time.NominalDiffTime -> RestrictedGranularity
 deriveGranularity timeDifference
   | timeDifference / day > 1
-  = Coinbase.OneDay
+  = OneDay
 
   | timeDifference / hour > 1
-  = Coinbase.OneHour
+  = OneHour
 
   | otherwise
-  = Coinbase.OneMinute
+  = OneMinute
 
   where
     minute = 60
     hour   = 60 * minute
     day    = 24 * hour
 
-roundToGranularity :: Coinbase.Granularity -> Time.UTCTime -> Time.UTCTime
-roundToGranularity = undefined
 
+roundToGranularity
+  :: RestrictedGranularity
+  -> Time.UTCTime
+  -> Time.UTCTime
+
+roundToGranularity OneDay Time.UTCTime{..}
+  = Time.UTCTime utctDay 0
+
+roundToGranularity OneHour Time.UTCTime{..}
+  = Time.UTCTime utctDay
+  $ (* (60 * 60)) $ fromInteger
+  $ fst $ properFraction (utctDayTime / 60 / 60)
+
+roundToGranularity OneMinute Time.UTCTime{..}
+  = Time.UTCTime utctDay
+  $ (* 60) $ fromInteger
+  $ fst $ properFraction (utctDayTime / 60)
 
 generateSwingCommands
   :: NoNewCandlesFoundError
@@ -227,6 +260,7 @@ processSingleCandle Coinbase.Candle{ high = newHigh, low = newLow, ..} = \case
       (getPrice previousLow)
 
   where
+    -- TODO: consider putting in different times so that you can sort by them
     saveNewHigh
       = AddNewPrice TimedPrice{ price = newHigh, time }
 

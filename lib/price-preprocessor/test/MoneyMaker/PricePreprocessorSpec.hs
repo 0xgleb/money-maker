@@ -26,16 +26,33 @@ spec =  do
 
   describeDeriveGranularity
 
-  -- TODO: describeRoundToGranularity
+  describeRoundToGranularity
 
   -- TODO: describe catchUpWithTheMarket
 
--- describeRoundToGranularity = describe "roundToGranularity" do
---   let propertyDescription =
---         "roundToGranularity granularity (roundToGranularity granularity time) \
---         \== roundToGranularity granularity time"
+describeRoundToGranularity :: Spec
+describeRoundToGranularity = describe "roundToGranularity" do
+  it "is idempotent" $ property \granularity time ->
+    roundToGranularity granularity (roundToGranularity granularity time)
+      `shouldBe` roundToGranularity granularity time
 
---   it propertyDescription
+  it "discards utctDayTime when rounded to OneDay"
+    $ property \nonRoundedTime@Time.UTCTime{..} ->
+        roundToGranularity OneDay nonRoundedTime
+          `shouldBe` Time.UTCTime utctDay 0
+
+  let minute = 60
+      hour   = 60 * minute
+
+  it "discards minutes when rounding to hours"
+    $ property \utctDay ->
+        roundToGranularity OneHour (Time.UTCTime utctDay $ 2 * hour + minute)
+          `shouldBe` Time.UTCTime utctDay (2 * hour)
+
+  it "discards seconds when rounding to minute"
+    $ property \utctDay ->
+        roundToGranularity OneMinute (Time.UTCTime utctDay $ hour + 10 * minute + 23)
+          `shouldBe` Time.UTCTime utctDay (hour + 10 * minute)
 
 describeDeriveGranularity :: Spec
 describeDeriveGranularity = describe "deriveGranularity" do
@@ -47,7 +64,7 @@ describeDeriveGranularity = describe "deriveGranularity" do
               }
 
         in deriveGranularity (Time.diffUTCTime endTime startTime)
-             `shouldBe` Coinbase.OneDay
+             `shouldBe` OneDay
 
   it "returns hours when the time difference is over an hour but less than a day"
     $ property \startTime ((+ 1) . abs -> numberOfHours) ->
@@ -57,7 +74,7 @@ describeDeriveGranularity = describe "deriveGranularity" do
                     `Time.addUTCTime ` startTime
 
           in deriveGranularity (Time.diffUTCTime endTime startTime)
-               `shouldBe` Coinbase.OneHour
+               `shouldBe` OneHour
 
   it "returns minutes when the time difference is less than an hour"
     $ property \startTime (abs -> numberOfMinutes) ->
@@ -67,7 +84,7 @@ describeDeriveGranularity = describe "deriveGranularity" do
                     `Time.addUTCTime ` startTime
 
           in deriveGranularity (Time.diffUTCTime endTime startTime)
-               `shouldBe` Coinbase.OneMinute
+               `shouldBe` OneMinute
 
 describeGenerateSwingCommands :: Spec
 describeGenerateSwingCommands = describe "generateSwingCommands" do
@@ -116,7 +133,7 @@ describeGenerateSwingCommands = describe "generateSwingCommands" do
 
         error
           = NoNewCandlesFoundError
-              { granularity = Coinbase.OneHour
+              { granularity = OneHour
               , productId   = Coinbase.TradingPair Coinbase.BTC Coinbase.USD
               }
 
