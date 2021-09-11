@@ -12,6 +12,7 @@ dependencies:
 - http-client
 - http-client-tls
 - protolude
+- quickcheck-instances
 - servant
 - servant-client
 - stm

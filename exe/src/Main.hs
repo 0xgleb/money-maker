@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 module Main where
 
 import Environment
@@ -14,13 +16,11 @@ import qualified Control.Monad.Logger        as Logger
 import qualified Data.Aeson                  as Aeson
 import qualified Data.Pool                   as Pool
 import qualified Data.Text.Lazy.IO           as Txt.LIO
-import qualified Data.Time.Calendar          as Time
 import qualified Data.Time.Clock             as Time
 import qualified Database.Persist.Postgresql as Postgres
 import qualified Database.Persist.Sql        as Persist
 import qualified Paths_exe                   as Path
 import qualified Prelude
-import qualified Servant.Client              as Servant
 import qualified System.IO                   as IO
 import qualified System.Process              as Proc
 import qualified Wuss
@@ -37,12 +37,8 @@ main = do
         @'[Coinbase.ServantClientError, Coinbase.HeaderError]
         ( print =<< Coinbase.getCandles
             (Coinbase.TradingPair Coinbase.BTC Coinbase.USD)
-            Nothing
-            Nothing
-            -- (Just (Time.UTCTime utctDay utctDayTime))
-            -- (Just Time.UTCTime{..})
-            -- (Time.UTCTime (Time.fromGregorian 2019 12 2) 0)
-            -- (Time.UTCTime (Time.fromGregorian 2019 12 5) 0)
+            (Just (Time.UTCTime utctDay utctDayTime))
+            (Just Time.UTCTime{..})
             Coinbase.OneDay
         )
         print

@@ -1,5 +1,6 @@
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE StrictData     #-}
+{-# LANGUAGE DeriveAnyClass  #-}
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE StrictData      #-}
 
 module MoneyMaker.PricePreprocessor
   ( ContractualPriceData
@@ -7,13 +8,17 @@ module MoneyMaker.PricePreprocessor
 
   , ContractualPrediction(..)
 
-  , NoNewCandlesFoundAfterAMinuteError(..)
+  , NoNewCandlesFoundError(..)
 
   , module Swings
+
+  -- Exports for testing:
+  , processSingleCandle
   )
   where
 
-import MoneyMaker.PricePreprocessor.Swings as Swings
+import MoneyMaker.PricePreprocessor.ConsolidatedCandles
+import MoneyMaker.PricePreprocessor.Swings              as Swings
 
 import qualified MoneyMaker.Coinbase.SDK as Coinbase
 import qualified MoneyMaker.Error        as Error
@@ -21,9 +26,8 @@ import qualified MoneyMaker.Eventful     as Eventful
 
 import Protolude
 
-import qualified Data.Aeson            as Aeson
-import qualified Data.Generics.Product as Generics
-import qualified Data.Time.Clock       as Time
+import qualified Data.Aeson      as Aeson
+import qualified Data.Time.Clock as Time
 
 -- Just a placeholder until Python actually sends some useful data
 data ContractualPrediction
@@ -54,7 +58,7 @@ toContractualPriceData
      , Coinbase.CoinbaseRestAPI m
      , Eventful.NoEventsFoundError `Error.Elem` errors
      , Eventful.CouldntDecodeEventError `Error.Elem` errors
-     , NoNewCandlesFoundAfterAMinuteError `Error.Elem` errors
+     , NoNewCandlesFoundError `Error.Elem` errors
      , Coinbase.ServantClientError `Error.Elem` errors
      , Coinbase.HeaderError `Error.Elem` errors
      )
@@ -79,8 +83,11 @@ toContractualPriceData Coinbase.TickerPriceData{ time = currentTime, ..} = do
   pure ContractualPriceData{ time = currentTime, ..}
 
 
-data NoNewCandlesFoundAfterAMinuteError
-  = NoNewCandlesFoundAfterAMinuteError
+data NoNewCandlesFoundError
+  = NoNewCandlesFoundError
+      { granularity :: Coinbase.Granularity
+      , productId   :: Coinbase.TradingPair
+      }
   deriving stock (Show)
 
 catchUpWithTheMarket
@@ -88,7 +95,7 @@ catchUpWithTheMarket
      , Coinbase.CoinbaseRestAPI m
      , Eventful.NoEventsFoundError `Error.Elem` errors
      , Eventful.CouldntDecodeEventError `Error.Elem` errors
-     , NoNewCandlesFoundAfterAMinuteError `Error.Elem` errors
+     , NoNewCandlesFoundError `Error.Elem` errors
      , Coinbase.ServantClientError `Error.Elem` errors
      , Coinbase.HeaderError `Error.Elem` errors
      )
@@ -99,42 +106,43 @@ catchUpWithTheMarket
 catchUpWithTheMarket productId currentTime = do
   savedSwings <-
     Error.catchVoid (Eventful.getAggregate @SwingEvent swingsAggregateId)
+      -- TODO: cover the case when there are no saved prices
       -- $ Error.catchUltraError @NoEventsFoundError
       --     $ \
 
   let timeOfPreviousSave
         = getTime $ getLastPrice savedSwings
 
-      timeSinceLastSavedPrice
-        = Time.diffUTCTime timeOfPreviousSave currentTime
+      granularity
+        = deriveGranularity $ Time.diffUTCTime timeOfPreviousSave currentTime
 
   consolidatedCandles <-
     consolidateCandles
       <$> Coinbase.getCandles productId
             (Just timeOfPreviousSave) -- TODO: round to granularity
             (Just currentTime) -- TODO: round to granularity
-            (deriveGranularity timeSinceLastSavedPrice)
+            granularity
 
-  case (consolidatedCandles, savedSwings) of
-    (NoCandles, _) ->
-      Error.throwUltraError NoNewCandlesFoundAfterAMinuteError
+  -- TODO: add recursion to fully catch up with the market
 
-    (OneCandle candle, _) ->
-      processSingleCandle candle savedSwings
+  let swingCommands
+        = generateSwingCommands
+            NoNewCandlesFoundError{..}
+            savedSwings
+            consolidatedCandles
 
-    (ConsolidatedCandles OrderedExtremums{..}, _) -> do
-      let (earlierExtremum, laterExtremum) =
-            if getTime consolidatedLow < getTime consolidatedHigh
-            then (consolidatedLow, consolidatedHigh)
-            else (consolidatedHigh, consolidatedLow)
+  case swingCommands of
+    Left error ->
+      Error.throwUltraError error
 
-      void $ Error.catchVoid
-        $ Eventful.applyCommand swingsAggregateId
-        $ AddNewPrice earlierExtremum
+    Right (command :| commands) -> Error.catchVoid do
+      swings <- Eventful.applyCommand swingsAggregateId command
 
-      Error.catchVoid
-        $ Eventful.applyCommand swingsAggregateId
-        $ AddNewPrice laterExtremum
+      foldM
+        (const $ Eventful.applyCommand swingsAggregateId)
+        swings
+        commands
+
 
 deriveGranularity :: Time.NominalDiffTime -> Coinbase.Granularity
 deriveGranularity timeDifference
@@ -153,24 +161,46 @@ deriveGranularity timeDifference
     day    = 24 * hour
 
 
-processSingleCandle
-  :: ( Eventful.MonadEventStore m
-     , Eventful.CouldntDecodeEventError `Error.Elem` errors
-     )
-  => Coinbase.Candle
+generateSwingCommands
+  :: NoNewCandlesFoundError
   -> Swings
-  -> m errors Swings
+  -> ConsolidatedCandles
+  -> Either NoNewCandlesFoundError (NonEmpty SwingCommand)
+
+generateSwingCommands error savedSwings = \case
+  NoCandles ->
+    Left error
+
+  OneCandle candle ->
+    Right $ processSingleCandle candle savedSwings
+
+  ConsolidatedCandles OrderedExtremums{..} ->
+    let (earlierExtremum, laterExtremum) =
+          if getTime consolidatedLow < getTime consolidatedHigh
+          then (consolidatedLow, consolidatedHigh)
+          else (consolidatedHigh, consolidatedLow)
+
+    in Right [AddNewPrice earlierExtremum, AddNewPrice laterExtremum]
+
+-- | We need to know the order of highs and lows to construct swings.
+-- However, when we have only one new candle, we don't know if the high or the
+-- low came first. This function aims to sensibly resolve this problem.
+-- You can find an explanation with a diagram in docs/resolve-order-ambiguity.png
+processSingleCandle
+  :: Coinbase.Candle
+  -> Swings
+  -> NonEmpty SwingCommand
 
 processSingleCandle Coinbase.Candle{ high = newHigh, low = newLow, ..} = \case
   SwingUp High{ previousLow = Nothing, price = oldHigh } ->
     if newHigh > oldHigh
-    then void saveNewHigh >> saveNewLow
-    else void saveNewLow  >> saveNewHigh
+    then [saveNewHigh, saveNewLow]
+    else [saveNewLow , saveNewHigh]
 
   SwingDown Low{ previousHigh = Nothing, price = oldLow } ->
     if newLow < oldLow
-    then void saveNewLow  >> saveNewHigh
-    else void saveNewHigh >> saveNewLow
+    then [saveNewLow , saveNewHigh]
+    else [saveNewHigh, saveNewLow]
 
   SwingUp previousHigh@High{ previousLow = Just previousLow } ->
     resolveExtremumOrderAmbiguity
@@ -186,106 +216,44 @@ processSingleCandle Coinbase.Candle{ high = newHigh, low = newLow, ..} = \case
 
   where
     saveNewHigh
-      = Error.catchVoid $ Eventful.applyCommand swingsAggregateId
-          $ AddNewPrice TimedPrice{ price = newHigh, time }
+      = AddNewPrice TimedPrice{ price = newHigh, time }
 
     saveNewLow
-      = Error.catchVoid $ Eventful.applyCommand swingsAggregateId
-          $ AddNewPrice TimedPrice{ price = newLow, time }
+      = AddNewPrice TimedPrice{ price = newLow, time }
 
     resolveExtremumOrderAmbiguity lastSwingWasUp oldHigh oldLow
+      -- Case 1:
+      -- Neither the previous high nor the previous low are invalidated.
+      -- => Save the local extremum opposite to the previous one.
+      -- e.g. if last swing was up then save the new low.
+
       | oldLow <= newLow && newHigh <= oldHigh && lastSwingWasUp
-      = saveNewLow
+      = [saveNewLow]
 
       | oldLow <= newLow && newHigh <= oldHigh && not lastSwingWasUp
-      = saveNewHigh
+      = [saveNewHigh]
+
+      -- Case 2:
+      -- One of the previous extremums was invalidated.
+      -- => Save the invalidated extremum.
+      -- e.g. if new low is lower than the previous one, save it.
 
       | oldLow <= newLow && newHigh > oldHigh
-      = saveNewHigh
+      = [saveNewHigh]
 
       | oldLow > newLow && newHigh <= oldHigh
-      = saveNewLow
+      = [saveNewLow]
 
-      | otherwise -- new low is lower and new high is higher
+      -- Case 3:
+      -- Both previous extremums were invalidated.
+      -- The new low is lower and the new high is higher.
+      --
+      -- => Save both new extremums in the order of the previous swing.
+      --
+      -- e.g. if the previous swing was up then first save the new low
+      -- and then the new high.
+
+      | otherwise
       = if lastSwingWasUp
-        then void saveNewLow  >> saveNewHigh
-        else void saveNewHigh >> saveNewLow
-
-
-data ConsolidatedCandles
-  = NoCandles
-  | OneCandle Coinbase.Candle
-  | ConsolidatedCandles OrderedExtremums
-
-data OrderedExtremums
-  = OrderedExtremums
-      { consolidatedLow  :: TimedPrice
-      , consolidatedHigh :: TimedPrice
-      }
-
-consolidateCandles :: [Coinbase.Candle] -> ConsolidatedCandles
-consolidateCandles candles
-  = foldr consolidateACandle NoCandles $ sortOn getTime candles
-  where
-    consolidateACandle nextCandle = \case
-      NoCandles ->
-        OneCandle nextCandle
-
-      OneCandle consolidated ->
-        ConsolidatedCandles OrderedExtremums
-          { consolidatedLow =
-              if Coinbase.low nextCandle < Coinbase.low consolidated
-              then TimedPrice
-                      { time  = getTime nextCandle
-                      , price = Coinbase.low nextCandle
-                      }
-              else TimedPrice
-                      { time  = getTime consolidated
-                      , price = Coinbase.low consolidated
-                      }
-
-          , consolidatedHigh =
-              if Coinbase.high nextCandle > Coinbase.high consolidated
-              then TimedPrice
-                      { time  = getTime nextCandle
-                      , price = Coinbase.high nextCandle
-                      }
-              else TimedPrice
-                      { time  = getTime consolidated
-                      , price = Coinbase.high consolidated
-                      }
-          }
-
-      ConsolidatedCandles OrderedExtremums{..} ->
-        ConsolidatedCandles OrderedExtremums
-          { consolidatedLow =
-              if Coinbase.low nextCandle < getPrice consolidatedLow
-              then TimedPrice
-                      { time  = getTime nextCandle
-                      , price = Coinbase.low nextCandle
-                      }
-              else consolidatedLow
-
-          , consolidatedHigh =
-              if Coinbase.high nextCandle > getPrice consolidatedHigh
-              then TimedPrice
-                      { time  = getTime nextCandle
-                      , price = Coinbase.high nextCandle
-                      }
-              else consolidatedHigh
-          }
-
-
-getTime
-  :: Generics.HasField' "time" mainType fieldType
-  => mainType
-  -> fieldType
-getTime
-  = Generics.getField @"time"
-
-getPrice
-  :: Generics.HasField' "price" mainType fieldType
-  => mainType
-  -> fieldType
-getPrice
-  = Generics.getField @"price"
+        then [saveNewLow , saveNewHigh]
+        else [saveNewHigh, saveNewLow]

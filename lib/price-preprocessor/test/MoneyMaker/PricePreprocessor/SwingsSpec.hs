@@ -1,18 +1,18 @@
 module MoneyMaker.PricePreprocessor.SwingsSpec
   ( spec
+  , mkTime
   )
   where
 
-import qualified MoneyMaker.Coinbase.SDK      as Coinbase
-import qualified MoneyMaker.Error             as Error
-import qualified MoneyMaker.Eventful          as Eventful
-import           MoneyMaker.PricePreprocessor
+import qualified MoneyMaker.Coinbase.SDK             as Coinbase
+import qualified MoneyMaker.Error                    as Error
+import qualified MoneyMaker.Eventful                 as Eventful
+import           MoneyMaker.PricePreprocessor.Swings
 
 import Protolude
 import Test.Hspec
 
-import qualified Data.Time.Calendar as Time
-import qualified Data.Time.Clock    as Time
+import qualified Data.Time as Time
 
 type Errors =
   '[ Void
@@ -52,8 +52,14 @@ prices
     priceValues
       = Coinbase.Price <$> [1, 3, 2, 10, 7, 12, 8, 11, 4, 6, 5, 9]
 
+
 mkTime :: Integer -> Time.UTCTime
 mkTime num
   = Time.UTCTime
       (Time.fromGregorian 2021 07 31)
-      (Time.secondsToDiffTime (19 * 60 * 60 + 37 * 60 + num))
+      (Time.secondsToDiffTime (19 * hours + 37 * minutes + num))
+
+  where
+    hours   = 60 * minutes
+    minutes = 60 * seconds
+    seconds = 1

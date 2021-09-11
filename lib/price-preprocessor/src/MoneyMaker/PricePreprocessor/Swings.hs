@@ -2,14 +2,17 @@
 {-# LANGUAGE StrictData     #-}
 
 module MoneyMaker.PricePreprocessor.Swings
-  ( SwingCommand(..)
-  , SwingEvent
-  , Swings(..)
+  ( Swings(..)
   , High(..)
   , Low(..)
 
   , getLastPrice
   , TimedPrice(..)
+  , getTime
+  , getPrice
+
+  , SwingEvent
+  , SwingCommand(..)
   )
   where
 
@@ -18,51 +21,16 @@ import qualified MoneyMaker.Eventful     as Eventful
 
 import Protolude
 
-import qualified Data.Aeson      as Aeson
-import qualified Data.Time.Clock as Time
+import qualified Data.Aeson            as Aeson
+import qualified Data.Generics.Product as Generics
+import qualified Data.Time.Clock       as Time
 
-data SwingCommand
-  = AddNewPrice TimedPrice
-
-instance Eventful.Command SwingCommand SwingEvent where
-  type CommandErrors SwingCommand = '[]
-
-  handleCommand _id Nothing (AddNewPrice TimedPrice{..})
-    = pure $ NewLowReached price time :| []
-
-  handleCommand _id (Just swings) (AddNewPrice TimedPrice{ price = newPrice, ..})
-    = let previousPrice = case swings of
-            SwingUp   High{price} -> price
-            SwingDown Low{price}  -> price
-
-      in pure $ if newPrice > previousPrice
-           then NewHighReached newPrice time :| []
-           else NewLowReached newPrice time :| []
-
-
-data SwingEvent
-  = NewHighReached Coinbase.Price Time.UTCTime
-  | NewLowReached Coinbase.Price Time.UTCTime
-  deriving stock (Generic)
-  deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
 data Swings
   = SwingUp High
   | SwingDown Low
   deriving stock (Eq, Show, Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
-
-getLastPrice :: Swings -> TimedPrice
-getLastPrice = \case
-  SwingUp High{..}  -> TimedPrice{..}
-  SwingDown Low{..} -> TimedPrice{..}
-
-data TimedPrice
-  = TimedPrice
-      { price :: Coinbase.Price
-      , time  :: Time.UTCTime
-      }
-  deriving stock (Generic)
 
 data High
   = High
@@ -80,6 +48,41 @@ data Low
       , previousHigh :: Maybe High
       }
   deriving stock (Eq, Show, Generic)
+  deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
+
+getLastPrice :: Swings -> TimedPrice
+getLastPrice = \case
+  SwingUp High{..}  -> TimedPrice{..}
+  SwingDown Low{..} -> TimedPrice{..}
+
+data TimedPrice
+  = TimedPrice
+      { price :: Coinbase.Price
+      , time  :: Time.UTCTime
+      }
+  deriving stock (Show, Eq, Generic)
+
+{-# INLINE getTime #-}
+getTime
+  :: Generics.HasField' "time" mainType fieldType
+  => mainType
+  -> fieldType
+getTime
+  = Generics.getField @"time"
+
+{-# INLINE getPrice #-}
+getPrice
+  :: Generics.HasField' "price" mainType fieldType
+  => mainType
+  -> fieldType
+getPrice
+  = Generics.getField @"price"
+
+
+data SwingEvent
+  = NewHighReached Coinbase.Price Time.UTCTime
+  | NewLowReached Coinbase.Price Time.UTCTime
+  deriving stock (Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
 instance Eventful.Eventful SwingEvent where
@@ -137,3 +140,23 @@ addNewLow newLowPrice time high@High{previousLow}
           (Low newLowPrice time $ Just high)
           (addNewLow newLowPrice time)
           (previousHigh low)
+
+
+data SwingCommand
+  = AddNewPrice TimedPrice
+  deriving stock (Eq, Show)
+
+instance Eventful.Command SwingCommand SwingEvent where
+  type CommandErrors SwingCommand = '[]
+
+  handleCommand _id Nothing (AddNewPrice TimedPrice{..})
+    = pure $ NewLowReached price time :| []
+
+  handleCommand _id (Just swings) (AddNewPrice TimedPrice{ price = newPrice, ..})
+    = let previousPrice = case swings of
+            SwingUp   High{price} -> price
+            SwingDown Low{price}  -> price
+
+      in pure $ if newPrice > previousPrice
+           then NewHighReached newPrice time :| []
+           else NewLowReached newPrice time :| []

@@ -21,12 +21,21 @@ import qualified Data.Time.Clock.POSIX             as Time
 import qualified Servant.API                       as Servant
 import qualified Test.QuickCheck                   as QC
 import qualified Test.QuickCheck.Arbitrary.Generic as QC
+import           Test.QuickCheck.Instances         ()
 
--- TODO: this price type is only good for BTC/USD trading pair
--- most coins (that are not USD) can have more than 2 decimal places
+-- TODO: this price type is only good when USD is the quote currency
+-- pretty much any other quote currency will have more than 2 decimal places
 newtype Price
   = Price { getPrice :: Fixed.Centi }
-  deriving newtype (Show, Read, Eq, Ord, Aeson.ToJSON, Aeson.FromJSON)
+  deriving newtype
+    ( QC.Arbitrary
+    , Show
+    , Read
+    , Eq
+    , Ord
+    , Aeson.ToJSON
+    , Aeson.FromJSON
+    )
 
 data Currency
   = BTC
@@ -78,6 +87,10 @@ data Candle
       -- , volume :: Volume
       }
   deriving stock (Generic, Show, Eq)
+
+instance QC.Arbitrary Candle where
+  arbitrary = QC.genericArbitrary
+  shrink    = QC.genericShrink
 
 instance Aeson.FromJSON Candle where
   parseJSON = Aeson.withArray "Candle" $ \array ->

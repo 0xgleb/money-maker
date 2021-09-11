@@ -137,6 +137,7 @@ data Granularity
   | OneHour        -- ^ 3600
   | SixHours       -- ^ 21600
   | OneDay         -- ^ 86400
+  deriving stock (Show)
 
 instance Servant.ToHttpApiData Granularity where
   toUrlPiece = \case

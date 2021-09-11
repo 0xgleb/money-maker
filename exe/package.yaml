@@ -88,5 +88,4 @@ executables:
     - stm
     - text
     - wuss
-    - servant-client # TODO: REMOVE
     - time # TODO: REMOVE
