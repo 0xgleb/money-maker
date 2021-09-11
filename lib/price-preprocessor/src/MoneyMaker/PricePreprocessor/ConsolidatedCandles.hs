@@ -2,7 +2,7 @@
 
 module MoneyMaker.PricePreprocessor.ConsolidatedCandles
   ( ConsolidatedCandles(..)
-  , OrderedExtremums(..)
+  , ConsolidatedExtremums(..)
 
   , consolidateCandles
   )
@@ -17,11 +17,11 @@ import Protolude
 data ConsolidatedCandles
   = NoCandles
   | OneCandle Coinbase.Candle
-  | ConsolidatedCandles OrderedExtremums
+  | ConsolidatedCandles ConsolidatedExtremums
   deriving stock (Show, Eq)
 
-data OrderedExtremums
-  = OrderedExtremums
+data ConsolidatedExtremums
+  = ConsolidatedExtremums
       { consolidatedLow  :: TimedPrice
       , consolidatedHigh :: TimedPrice
       }
@@ -37,7 +37,7 @@ consolidateCandles candles
             OneCandle nextCandle
 
           OneCandle consolidated ->
-            ConsolidatedCandles OrderedExtremums
+            ConsolidatedCandles ConsolidatedExtremums
               { consolidatedLow =
                   if Coinbase.low nextCandle < Coinbase.low consolidated
                   then TimedPrice
@@ -61,8 +61,8 @@ consolidateCandles candles
                           }
               }
 
-          ConsolidatedCandles OrderedExtremums{..} ->
-            ConsolidatedCandles OrderedExtremums
+          ConsolidatedCandles ConsolidatedExtremums{..} ->
+            ConsolidatedCandles ConsolidatedExtremums
               { consolidatedLow =
                   if Coinbase.low nextCandle < getPrice consolidatedLow
                   then TimedPrice

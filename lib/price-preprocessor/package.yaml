@@ -7,7 +7,9 @@ dependencies:
 - money-maker-error
 - money-maker-eventful
 - base
+- QuickCheck
 - aeson
+- generic-arbitrary
 - generic-lens
 - protolude
 - time
@@ -78,7 +80,6 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - money-maker-price-preprocessor
-    - QuickCheck
     - hspec
     # - generic-random
     # - quickcheck-text

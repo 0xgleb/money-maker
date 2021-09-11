@@ -13,6 +13,7 @@ module MoneyMaker.PricePreprocessor
   , module Swings
 
   -- Exports for testing:
+  , generateSwingCommands
   , processSingleCandle
   )
   where
@@ -26,8 +27,10 @@ import qualified MoneyMaker.Eventful     as Eventful
 
 import Protolude
 
-import qualified Data.Aeson      as Aeson
-import qualified Data.Time.Clock as Time
+import qualified Data.Aeson                        as Aeson
+import qualified Data.Time.Clock                   as Time
+import qualified Test.QuickCheck                   as QC
+import qualified Test.QuickCheck.Arbitrary.Generic as QC
 
 -- Just a placeholder until Python actually sends some useful data
 data ContractualPrediction
@@ -88,7 +91,11 @@ data NoNewCandlesFoundError
       { granularity :: Coinbase.Granularity
       , productId   :: Coinbase.TradingPair
       }
-  deriving stock (Show)
+  deriving stock (Generic, Show, Eq)
+
+instance QC.Arbitrary NoNewCandlesFoundError where
+  arbitrary = QC.genericArbitrary
+  shrink    = QC.genericShrink
 
 catchUpWithTheMarket
   :: ( Eventful.MonadEventStore m
@@ -174,7 +181,7 @@ generateSwingCommands error savedSwings = \case
   OneCandle candle ->
     Right $ processSingleCandle candle savedSwings
 
-  ConsolidatedCandles OrderedExtremums{..} ->
+  ConsolidatedCandles ConsolidatedExtremums{..} ->
     let (earlierExtremum, laterExtremum) =
           if getTime consolidatedLow < getTime consolidatedHigh
           then (consolidatedLow, consolidatedHigh)

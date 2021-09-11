@@ -16,7 +16,7 @@ import Test.QuickCheck
 
 spec :: Spec
 spec = describe "consolidateCandles" do
-  it "always returns OrderedExtremums{..} when there are at least 2 candles"
+  it "always returns ConsolidatedExtremums{..} when there are at least 2 candles"
     $ property \candle anotherCandle candles ->
         case consolidateCandles (candle : anotherCandle : candles) of
           NoCandles             -> False
@@ -25,7 +25,7 @@ spec = describe "consolidateCandles" do
 
   it "always returns the candle given to it when there is only 1 candle"
     $ property \candle ->
-        consolidateCandles [candle] `shouldBe` OneCandle candle
+        consolidateCandles [candle] == OneCandle candle
 
   it "returns NoCandles when given an empty list" do
     consolidateCandles [] `shouldBe` NoCandles
@@ -66,7 +66,7 @@ spec = describe "consolidateCandles" do
           ]
 
         expectedResult
-          = ConsolidatedCandles OrderedExtremums
+          = ConsolidatedCandles ConsolidatedExtremums
               { consolidatedLow = TimedPrice
                   { time  = mkTime 2
                   , price = Coinbase.Price 1
@@ -100,7 +100,7 @@ spec = describe "consolidateCandles" do
               }
 
         expectedResult
-          = ConsolidatedCandles OrderedExtremums
+          = ConsolidatedCandles ConsolidatedExtremums
               { consolidatedLow = TimedPrice
                   { price = Coinbase.Price 1
                   , time  = mkTime 1

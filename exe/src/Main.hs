@@ -93,7 +93,7 @@ main = do
               $ Error.handleAllErrors
                   @'[ Eventful.NoEventsFoundError
                     , Eventful.CouldntDecodeEventError
-                    , Preprocessor.NoNewCandlesFoundAfterAMinuteError
+                    , Preprocessor.NoNewCandlesFoundError
                     , Coinbase.ServantClientError
                     , Coinbase.HeaderError
                     ]
@@ -104,7 +104,7 @@ main = do
                   (\(Eventful.CouldntDecodeEventError err) ->
                     putStrLn $ "Couldn't decode event error: " <> err)
 
-                  (print @_ @Preprocessor.NoNewCandlesFoundAfterAMinuteError)
+                  (print @_ @Preprocessor.NoNewCandlesFoundError)
 
                   (print @_ @Coinbase.ServantClientError)
 

@@ -8,17 +8,87 @@ module MoneyMaker.PricePreprocessorSpec
 import MoneyMaker.PricePreprocessor.SwingsSpec (mkTime)
 
 import MoneyMaker.PricePreprocessor
+import MoneyMaker.PricePreprocessor.ConsolidatedCandles
 
 import qualified MoneyMaker.Coinbase.SDK as Coinbase
 
 import Protolude
 import Test.Hspec
+import Test.QuickCheck
 
 spec :: Spec
 spec =  do
   describeProcessSingleCandle
 
-  _describeCatchUpWithTheMarket
+  describeGenerateSwingCommands
+
+  -- TODO: describe catchUpWithTheMarket
+
+-- describeDeriveGranularity :: Spec
+-- describeDeriveGranularity = describe "deriveGranularity" do
+
+describeGenerateSwingCommands :: Spec
+describeGenerateSwingCommands = describe "generateSwingCommands" do
+  it "returns an error when there are no new candles"
+    $ property \error swings ->
+        generateSwingCommands error swings NoCandles == Left error
+
+  it "calls processSingleCandle when there is only one new candle"
+    $ property \error swings candle ->
+        generateSwingCommands error swings (OneCandle candle)
+          == Right (processSingleCandle candle swings)
+
+  it "saves ConsolidatedExtremums in order" do
+    let newLow  = Coinbase.Price 5
+        newHigh = Coinbase.Price 12
+
+        lowFirstExtremums
+          = ConsolidatedCandles ConsolidatedExtremums
+              { consolidatedLow = TimedPrice
+                  { time  = mkTime 5
+                  , price = newLow
+                  }
+              , consolidatedHigh = TimedPrice
+                  { time  = mkTime 6
+                  , price = newHigh
+                  }
+              }
+
+        highFirstExtremums
+          = ConsolidatedCandles ConsolidatedExtremums
+              { consolidatedLow = TimedPrice
+                  { time  = mkTime 6
+                  , price = newLow
+                  }
+              , consolidatedHigh = TimedPrice
+                  { time  = mkTime 5
+                  , price = newHigh
+                  }
+              }
+
+        saveHigh (mkTime -> time)
+          = AddNewPrice TimedPrice{ price = newHigh, time }
+
+        saveLow (mkTime -> time)
+          = AddNewPrice TimedPrice{ price = newLow, time }
+
+        error
+          = NoNewCandlesFoundError
+              { granularity = Coinbase.OneHour
+              , productId   = Coinbase.TradingPair Coinbase.BTC Coinbase.USD
+              }
+
+    generateSwingCommands error upSwings lowFirstExtremums
+      `shouldBe` Right [saveLow 5, saveHigh 6]
+
+    generateSwingCommands error upSwings highFirstExtremums
+      `shouldBe` Right [saveHigh 5, saveLow 6]
+
+    generateSwingCommands error downSwings lowFirstExtremums
+      `shouldBe` Right [saveLow 5, saveHigh 6]
+
+    generateSwingCommands error downSwings highFirstExtremums
+      `shouldBe` Right [saveHigh 5, saveLow 6]
 
 describeProcessSingleCandle :: Spec
 describeProcessSingleCandle = describe "processSingleCandle" do

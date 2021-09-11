@@ -22,13 +22,15 @@ import qualified MoneyMaker.Error as Error
 
 import Protolude
 
-import qualified Data.ByteString.Lazy    as BSL
-import qualified Data.Time.Clock         as Time
-import qualified Network.HTTP.Client     as Network
-import qualified Network.HTTP.Client.TLS as Network.TLS
-import           Servant.API             ((:>))
-import qualified Servant.API             as Servant
-import qualified Servant.Client          as Servant
+import qualified Data.ByteString.Lazy              as BSL
+import qualified Data.Time.Clock                   as Time
+import qualified Network.HTTP.Client               as Network
+import qualified Network.HTTP.Client.TLS           as Network.TLS
+import           Servant.API                       ((:>))
+import qualified Servant.API                       as Servant
+import qualified Servant.Client                    as Servant
+import qualified Test.QuickCheck                   as QC
+import qualified Test.QuickCheck.Arbitrary.Generic as QC
 
 
 data ServantClientError
@@ -137,7 +139,11 @@ data Granularity
   | OneHour        -- ^ 3600
   | SixHours       -- ^ 21600
   | OneDay         -- ^ 86400
-  deriving stock (Show)
+  deriving stock (Generic, Show, Eq)
+
+instance QC.Arbitrary Granularity where
+  arbitrary = QC.genericArbitrary
+  shrink    = QC.genericShrink
 
 instance Servant.ToHttpApiData Granularity where
   toUrlPiece = \case

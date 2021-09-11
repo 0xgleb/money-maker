@@ -21,9 +21,11 @@ import qualified MoneyMaker.Eventful     as Eventful
 
 import Protolude
 
-import qualified Data.Aeson            as Aeson
-import qualified Data.Generics.Product as Generics
-import qualified Data.Time.Clock       as Time
+import qualified Data.Aeson                        as Aeson
+import qualified Data.Generics.Product             as Generics
+import qualified Data.Time.Clock                   as Time
+import qualified Test.QuickCheck                   as QC
+import qualified Test.QuickCheck.Arbitrary.Generic as QC
 
 
 data Swings
@@ -31,6 +33,10 @@ data Swings
   | SwingDown Low
   deriving stock (Eq, Show, Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
+
+instance QC.Arbitrary Swings where
+  arbitrary = QC.genericArbitrary
+  shrink    = QC.genericShrink
 
 data High
   = High
@@ -41,6 +47,10 @@ data High
   deriving stock (Eq, Show, Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
+instance QC.Arbitrary High where
+  arbitrary = QC.genericArbitrary
+  shrink    = QC.genericShrink
+
 data Low
   = Low
       { price        :: Coinbase.Price
@@ -49,6 +59,10 @@ data Low
       }
   deriving stock (Eq, Show, Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
+
+instance QC.Arbitrary Low where
+  arbitrary = QC.genericArbitrary
+  shrink    = QC.genericShrink
 
 getLastPrice :: Swings -> TimedPrice
 getLastPrice = \case
