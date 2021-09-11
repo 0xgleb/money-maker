@@ -60,7 +60,8 @@ swingsAggregateId
 
 
 toContractualPriceData
-  :: ( Eventful.MonadEventStore m
+  :: forall errors m
+   . ( Eventful.MonadEventStore m
      , Coinbase.CoinbaseRestAPI m
      , Eventful.NoEventsFoundError `Error.Elem` errors
      , Eventful.CouldntDecodeEventError `Error.Elem` errors

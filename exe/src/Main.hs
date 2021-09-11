@@ -1,5 +1,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
+{-# LANGUAGE QuantifiedConstraints #-}
+
 module Main where
 
 import Environment
@@ -73,53 +75,65 @@ main = do
             handlePrediction prediction
 
   where
-    -- placeholder for the function that will get live price data from the
-    -- Coinbase Pro Websockets API, process it, and write relevant information
-    -- into the price data queue
-    getLivePriceData
-      :: Postgres.ConnectionPool
-      -> Mode
-      -> STM.TQueue Preprocessor.ContractualPriceData
-      -> IO ()
-    getLivePriceData connectionPool mode priceDataQueue = do
-      let websocketHost = case mode of
-            ProdMode -> "ws-feed.pro.coinbase.com"
-            TestMode -> "ws-feed-public.sandbox.pro.coinbase.com"
-
-      Wuss.runSecureClient websocketHost 443 "/"
-        $ Coinbase.websocketsClient $ \newPriceData ->
-            Eventful.runSqlEventStoreTWithoutErrors connectionPool
-              $ Coinbase.runSandboxCoinbaseRestT
-              $ Error.handleAllErrors
-                  @'[ Eventful.NoEventsFoundError
-                    , Eventful.CouldntDecodeEventError
-                    , Preprocessor.NoNewCandlesFoundError
-                    , Coinbase.ServantClientError
-                    , Coinbase.HeaderError
-                    ]
-                  (processPriceData priceDataQueue newPriceData)
-
-                  (\Eventful.NoEventsFoundError -> putStrLn @Text "No events found")
-
-                  (\(Eventful.CouldntDecodeEventError err) ->
-                    putStrLn $ "Couldn't decode event error: " <> err)
-
-                  (print @_ @Preprocessor.NoNewCandlesFoundError)
-
-                  (print @_ @Coinbase.ServantClientError)
-
-                  (print @_ @Coinbase.HeaderError)
-
-
-    processPriceData priceDataQueue newPriceData = do
-      priceData <- Preprocessor.toContractualPriceData newPriceData
-      liftIO $ STM.atomically $ STM.writeTQueue priceDataQueue priceData
 
     -- placeholder for the function that will take a new prediction from the
     -- prediction process and evaluate whether it needs to make any changes
     -- to the portfolio based on that
     handlePrediction Preprocessor.ContractualPrediction{..} = do
       putStrLn message
+
+
+getLivePriceData
+  :: Postgres.ConnectionPool
+  -> Mode
+  -> STM.TQueue Preprocessor.ContractualPriceData
+  -> IO ()
+getLivePriceData connectionPool mode priceDataQueue = do
+  let websocketHost = case mode of
+        ProdMode -> "ws-feed.pro.coinbase.com"
+        TestMode -> "ws-feed-public.sandbox.pro.coinbase.com"
+
+  Wuss.runSecureClient websocketHost 443 "/"
+    $ Coinbase.websocketsClient \newPriceData ->
+        Eventful.runSqlEventStoreTWithoutErrors connectionPool
+          $ Coinbase.runSandboxCoinbaseRestT
+          $ Error.handleAllErrors @ProcessPriceDataErrors
+              (processPriceData priceDataQueue newPriceData)
+
+              (\Eventful.NoEventsFoundError -> putStrLn @Text "No events found")
+
+              (\(Eventful.CouldntDecodeEventError err) ->
+                putStrLn $ "Couldn't decode event error: " <> err)
+
+              (print @_ @Preprocessor.NoNewCandlesFoundError)
+
+              (print @_ @Coinbase.ServantClientError)
+
+              (print @_ @Coinbase.HeaderError)
+
+
+type ProcessPriceDataErrors =
+  '[ Eventful.NoEventsFoundError
+   , Eventful.CouldntDecodeEventError
+   , Preprocessor.NoNewCandlesFoundError
+   , Coinbase.ServantClientError
+   , Coinbase.HeaderError
+   ]
+
+processPriceData
+  :: ( forall errors. MonadIO (m errors)
+     , Eventful.MonadEventStore m
+     , Coinbase.CoinbaseRestAPI m
+     )
+  => STM.TQueue Preprocessor.ContractualPriceData
+  -> Coinbase.TickerPriceData
+  -> m ProcessPriceDataErrors ()
+
+processPriceData priceDataQueue newPriceData = do
+  priceData <-
+    Preprocessor.toContractualPriceData @ProcessPriceDataErrors newPriceData
+
+  liftIO $ STM.atomically $ STM.writeTQueue priceDataQueue priceData
 
 spawnPredictionProcessAndBindToQueues
   :: IO (STM.TQueue Preprocessor.ContractualPriceData, STM.TQueue Preprocessor.ContractualPrediction)

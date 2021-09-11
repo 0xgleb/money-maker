@@ -44,6 +44,8 @@ stack test --no-keep-going --fast --file-watch --test-arguments "--color"
 
 Add `--ghc-options -Wwarn` at the end of that if you want to temporarily ignore non-critical warnings. The project is configured in a way that turns warnings into errors, this flag turns them back into warnings.
 
+Add `--force-dirty` to force stack to rebuild everything.
+
 # Money Maker Roadmap
 
 ## Init
