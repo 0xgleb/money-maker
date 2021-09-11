@@ -13,6 +13,8 @@ module MoneyMaker.PricePreprocessor
   , module Swings
 
   -- Exports for testing:
+  , deriveGranularity
+  , roundToGranularity
   , generateSwingCommands
   , processSingleCandle
   )
@@ -120,14 +122,14 @@ catchUpWithTheMarket productId currentTime = do
   let timeOfPreviousSave
         = getTime $ getLastPrice savedSwings
 
-      granularity
-        = deriveGranularity $ Time.diffUTCTime timeOfPreviousSave currentTime
+      granularity -- TODO: throw an error if the difference is negative
+        = deriveGranularity $ Time.diffUTCTime currentTime timeOfPreviousSave
 
   consolidatedCandles <-
     consolidateCandles
       <$> Coinbase.getCandles productId
-            (Just timeOfPreviousSave) -- TODO: round to granularity
-            (Just currentTime) -- TODO: round to granularity
+            (Just $ roundToGranularity granularity timeOfPreviousSave)
+            (Just $ roundToGranularity granularity currentTime)
             granularity
 
   -- TODO: add recursion to fully catch up with the market
@@ -166,6 +168,9 @@ deriveGranularity timeDifference
     minute = 60
     hour   = 60 * minute
     day    = 24 * hour
+
+roundToGranularity :: Coinbase.Granularity -> Time.UTCTime -> Time.UTCTime
+roundToGranularity = undefined
 
 
 generateSwingCommands

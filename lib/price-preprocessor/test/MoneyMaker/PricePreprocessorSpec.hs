@@ -16,27 +16,69 @@ import Protolude
 import Test.Hspec
 import Test.QuickCheck
 
+import qualified Data.Time as Time
+
 spec :: Spec
 spec =  do
   describeProcessSingleCandle
 
   describeGenerateSwingCommands
 
+  describeDeriveGranularity
+
+  -- TODO: describeRoundToGranularity
+
   -- TODO: describe catchUpWithTheMarket
 
--- describeDeriveGranularity :: Spec
--- describeDeriveGranularity = describe "deriveGranularity" do
+-- describeRoundToGranularity = describe "roundToGranularity" do
+--   let propertyDescription =
+--         "roundToGranularity granularity (roundToGranularity granularity time) \
+--         \== roundToGranularity granularity time"
+
+--   it propertyDescription
+
+describeDeriveGranularity :: Spec
+describeDeriveGranularity = describe "deriveGranularity" do
+  it "returns days when the time difference is more than a day"
+    $ property \startTime@Time.UTCTime{..} ((+ 1) . abs -> positiveInteger) ->
+        let endTime = Time.UTCTime
+              { utctDay = positiveInteger `Time.addDays` utctDay
+              , utctDayTime = utctDayTime + 0.001
+              }
+
+        in deriveGranularity (Time.diffUTCTime endTime startTime)
+             `shouldBe` Coinbase.OneDay
+
+  it "returns hours when the time difference is over an hour but less than a day"
+    $ property \startTime ((+ 1) . abs -> numberOfHours) ->
+        numberOfHours < 24 ==>
+          let endTime
+                = (fromInteger numberOfHours * 60 * 60 + 0.001)
+                    `Time.addUTCTime ` startTime
+
+          in deriveGranularity (Time.diffUTCTime endTime startTime)
+               `shouldBe` Coinbase.OneHour
+
+  it "returns minutes when the time difference is less than an hour"
+    $ property \startTime (abs -> numberOfMinutes) ->
+        numberOfMinutes <= 60 ==>
+          let endTime
+                = (fromInteger numberOfMinutes * 60)
+                    `Time.addUTCTime ` startTime
+
+          in deriveGranularity (Time.diffUTCTime endTime startTime)
+               `shouldBe` Coinbase.OneMinute
 
 describeGenerateSwingCommands :: Spec
 describeGenerateSwingCommands = describe "generateSwingCommands" do
   it "returns an error when there are no new candles"
     $ property \error swings ->
-        generateSwingCommands error swings NoCandles == Left error
+        generateSwingCommands error swings NoCandles `shouldBe` Left error
 
   it "calls processSingleCandle when there is only one new candle"
     $ property \error swings candle ->
         generateSwingCommands error swings (OneCandle candle)
-          == Right (processSingleCandle candle swings)
+          `shouldBe` Right (processSingleCandle candle swings)
 
   it "saves ConsolidatedExtremums in order" do
     let newLow  = Coinbase.Price 5
