@@ -31,6 +31,7 @@ import qualified MoneyMaker.Eventful     as Eventful
 import Protolude
 
 import qualified Data.Aeson                        as Aeson
+import qualified Data.Generics.Product             as Generics
 import qualified Data.Time.Clock                   as Time
 import qualified Test.QuickCheck                   as QC
 import qualified Test.QuickCheck.Arbitrary.Generic as QC
@@ -127,8 +128,9 @@ catchUpWithTheMarket productId currentTime = do
       granularity -- TODO: throw an error if the difference is negative
         = deriveGranularity $ Time.diffUTCTime currentTime timeOfPreviousSave
 
+  -- TODO: you need to make sure you're not requesting more than 300 candles
   consolidatedCandles <-
-    consolidateCandles
+    consolidateCandles . fmap Generics.upcast
       <$> Coinbase.getCandles productId
             (Just $ roundToGranularity granularity timeOfPreviousSave)
             (Just $ roundToGranularity granularity currentTime)
@@ -219,6 +221,7 @@ roundToGranularity OneMinute Time.UTCTime{..}
   $ (* 60) $ fromInteger
   $ fst $ properFraction (utctDayTime / 60)
 
+
 generateSwingCommands
   :: NoNewCandlesFoundError
   -> Swings
@@ -230,26 +233,31 @@ generateSwingCommands error savedSwings = \case
     Left error
 
   OneCandle candle ->
-    Right $ processSingleCandle candle savedSwings
+    Right $ processSingleCandle (Generics.upcast candle) savedSwings
 
-  ConsolidatedCandles ConsolidatedExtremums{..} ->
-    let (earlierExtremum, laterExtremum) =
-          if getTime consolidatedLow < getTime consolidatedHigh
-          then (consolidatedLow, consolidatedHigh)
-          else (consolidatedHigh, consolidatedLow)
+  ConsolidatedCandles extremums ->
+    Right $ join $ extremums <&> \ConsolidatedExtremums{..} ->
+      let (earlierExtremum, laterExtremum) =
+            -- TODO: if consolidatedLow and consolidatedHigh were reached in the
+            -- same candle then we arbitrarily decide that the low came earlier.
+            -- A better approach would be to use the single candle resolution
+            -- mechanism to deal with this
+            if getTime consolidatedLow < getTime consolidatedHigh
+            then (consolidatedLow, consolidatedHigh)
+            else (consolidatedHigh, consolidatedLow)
 
-    in Right [AddNewPrice earlierExtremum, AddNewPrice laterExtremum]
+      in [AddNewPrice earlierExtremum, AddNewPrice laterExtremum]
 
 -- | We need to know the order of highs and lows to construct swings.
 -- However, when we have only one new candle, we don't know if the high or the
 -- low came first. This function aims to sensibly resolve this problem.
 -- You can find an explanation with a diagram in docs/resolve-order-ambiguity.png
 processSingleCandle
-  :: Coinbase.Candle
+  :: SubCandle
   -> Swings
   -> NonEmpty SwingCommand
 
-processSingleCandle Coinbase.Candle{ high = newHigh, low = newLow, ..} = \case
+processSingleCandle SubCandle{ high = newHigh, low = newLow, ..} = \case
   SwingUp High{ previousLow = Nothing, price = oldHigh } ->
     if newHigh > oldHigh
     then [saveNewHigh, saveNewLow]

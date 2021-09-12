@@ -76,6 +76,10 @@ data TimedPrice
       }
   deriving stock (Show, Eq, Generic)
 
+instance QC.Arbitrary TimedPrice where
+  arbitrary = QC.genericArbitrary
+  shrink    = QC.genericShrink
+
 {-# INLINE getTime #-}
 getTime
   :: Generics.HasField' "time" mainType fieldType
@@ -131,7 +135,7 @@ addNewHigh newHighPrice time low@Low{previousHigh}
       Nothing ->
         High newHighPrice time $ Just low
 
-      Just High{price = prevHighPrice} | newHighPrice < prevHighPrice ->
+      Just High{price = prevHighPrice} | newHighPrice <= prevHighPrice ->
         High newHighPrice time $ Just low
 
       Just high ->
@@ -146,7 +150,7 @@ addNewLow newLowPrice time high@High{previousLow}
       Nothing ->
         Low newLowPrice time $ Just high
 
-      Just Low{price = prevLowPrice} | newLowPrice > prevLowPrice ->
+      Just Low{price = prevLowPrice} | newLowPrice >= prevLowPrice ->
         Low newLowPrice time $ Just high
 
       Just low ->

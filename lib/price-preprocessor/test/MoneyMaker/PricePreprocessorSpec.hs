@@ -16,7 +16,8 @@ import Protolude
 import Test.Hspec
 import Test.QuickCheck
 
-import qualified Data.Time as Time
+import qualified Data.Generics.Product as Generics
+import qualified Data.Time             as Time
 
 spec :: Spec
 spec =  do
@@ -95,41 +96,63 @@ describeGenerateSwingCommands = describe "generateSwingCommands" do
   it "calls processSingleCandle when there is only one new candle"
     $ property \error swings candle ->
         generateSwingCommands error swings (OneCandle candle)
-          `shouldBe` Right (processSingleCandle candle swings)
+          `shouldBe` Right (processSingleCandle (Generics.upcast candle) swings)
+
+  it "generates the same commands if you turn the commands into candles"
+    $ property \error swings (ArbitraryExtremums extremums) ->
+        case generateSwingCommands error swings (ConsolidatedCandles extremums) of
+          Left _ ->
+            expectationFailure "Should only fail when given NoCandles"
+
+          expectedResult@(Right (command :| commands)) ->
+            let pretendCandles
+                  = (command : commands) <&> \(AddNewPrice TimedPrice{..}) ->
+                      SubCandle price price time
+
+            in generateSwingCommands error swings (consolidateCandles pretendCandles)
+                 `shouldBe` expectedResult
 
   it "saves ConsolidatedExtremums in order" do
-    let newLow  = Coinbase.Price 5
-        newHigh = Coinbase.Price 12
+    let mkTimedPrice (mkTime -> time) (Coinbase.Price -> price)
+          = TimedPrice{..}
 
-        lowFirstExtremums
-          = ConsolidatedCandles ConsolidatedExtremums
-              { consolidatedLow = TimedPrice
-                  { time  = mkTime 5
-                  , price = newLow
-                  }
-              , consolidatedHigh = TimedPrice
-                  { time  = mkTime 6
-                  , price = newHigh
-                  }
+        lowFirstExtremums = ConsolidatedCandles
+          [ ConsolidatedExtremums
+              { consolidatedLow  = mkTimedPrice 5 5
+              , consolidatedHigh = mkTimedPrice 6 12
               }
 
-        highFirstExtremums
-          = ConsolidatedCandles ConsolidatedExtremums
-              { consolidatedLow = TimedPrice
-                  { time  = mkTime 6
-                  , price = newLow
-                  }
-              , consolidatedHigh = TimedPrice
-                  { time  = mkTime 5
-                  , price = newHigh
-                  }
+          , ConsolidatedExtremums
+              { consolidatedLow  = mkTimedPrice 8 7
+              , consolidatedHigh = mkTimedPrice 7 10
+              }
+          ]
+
+        highFirstExtremums = ConsolidatedCandles
+          [ ConsolidatedExtremums
+              { consolidatedLow  = mkTimedPrice 6 5
+              , consolidatedHigh = mkTimedPrice 5 12
               }
 
-        saveHigh (mkTime -> time)
-          = AddNewPrice TimedPrice{ price = newHigh, time }
+          , ConsolidatedExtremums
+              { consolidatedLow  = mkTimedPrice 7 7
+              , consolidatedHigh = mkTimedPrice 8 10
+              }
+          ]
 
-        saveLow (mkTime -> time)
-          = AddNewPrice TimedPrice{ price = newLow, time }
+        lowFirstExpectedResult = AddNewPrice <$>
+          [ mkTimedPrice 5 5
+          , mkTimedPrice 6 12
+          , mkTimedPrice 7 10
+          , mkTimedPrice 8 7
+          ]
+
+        highFirstExpectedResult = AddNewPrice <$>
+          [ mkTimedPrice 5 12
+          , mkTimedPrice 6 5
+          , mkTimedPrice 7 7
+          , mkTimedPrice 8 10
+          ]
 
         error
           = NoNewCandlesFoundError
@@ -137,27 +160,27 @@ describeGenerateSwingCommands = describe "generateSwingCommands" do
               , productId   = Coinbase.TradingPair Coinbase.BTC Coinbase.USD
               }
 
+
     generateSwingCommands error upSwings lowFirstExtremums
-      `shouldBe` Right [saveLow 5, saveHigh 6]
+      `shouldBe` Right lowFirstExpectedResult
 
     generateSwingCommands error upSwings highFirstExtremums
-      `shouldBe` Right [saveHigh 5, saveLow 6]
+      `shouldBe` Right highFirstExpectedResult
 
     generateSwingCommands error downSwings lowFirstExtremums
-      `shouldBe` Right [saveLow 5, saveHigh 6]
+      `shouldBe` Right lowFirstExpectedResult
 
     generateSwingCommands error downSwings highFirstExtremums
-      `shouldBe` Right [saveHigh 5, saveLow 6]
+      `shouldBe` Right highFirstExpectedResult
+
 
 describeProcessSingleCandle :: Spec
 describeProcessSingleCandle = describe "processSingleCandle" do
   it "resolves extremum order ambiguity when no extremum is invalidated" do
-    let candle = Coinbase.Candle
+    let candle = SubCandle
           { time  = mkTime 5
           , high  = Coinbase.Price 7
           , low   = Coinbase.Price 3
-          , open  = Coinbase.Price 4
-          , close = Coinbase.Price 5
           }
 
         expectedUpSwingsResult
@@ -178,12 +201,10 @@ describeProcessSingleCandle = describe "processSingleCandle" do
 
 
   it "resolves extremum order ambiguity when previous high is invalidated" do
-    let candle = Coinbase.Candle
+    let candle = SubCandle
           { time  = mkTime 5
           , high  = Coinbase.Price 9
           , low   = Coinbase.Price 3
-          , open  = Coinbase.Price 4
-          , close = Coinbase.Price 5
           }
 
         expectedResult
@@ -197,12 +218,10 @@ describeProcessSingleCandle = describe "processSingleCandle" do
 
 
   it "resolves extremum order ambiguity when previous low is invalidated" do
-    let candle = Coinbase.Candle
+    let candle = SubCandle
           { time  = mkTime 5
           , high  = Coinbase.Price 7
           , low   = Coinbase.Price 1
-          , open  = Coinbase.Price 4
-          , close = Coinbase.Price 5
           }
 
         expectedResult
@@ -215,12 +234,10 @@ describeProcessSingleCandle = describe "processSingleCandle" do
     processSingleCandle candle downSwings `shouldBe` expectedResult
 
   it "resolves extremum order ambiguity when both extremums are invalidated" do
-    let candle = Coinbase.Candle
+    let candle = SubCandle
           { time  = mkTime 5
           , high  = Coinbase.Price 9
           , low   = Coinbase.Price 1
-          , open  = Coinbase.Price 4
-          , close = Coinbase.Price 5
           }
 
         expectedUpSwingsResult =

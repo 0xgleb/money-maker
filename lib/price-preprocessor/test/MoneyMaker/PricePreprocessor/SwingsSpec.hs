@@ -39,7 +39,7 @@ spec = do
 expectedAggregate :: Swings
 expectedAggregate
   = SwingUp
-  $ High (Coinbase.Price 9) (mkTime 12) . Just
+  $ High (Coinbase.Price 12) (mkTime 13) . Just
   $ Low (Coinbase.Price 4) (mkTime 9) . Just
   $ High (Coinbase.Price 12) (mkTime 6) . Just
   $ Low (Coinbase.Price 1) (mkTime 1) Nothing
@@ -50,7 +50,7 @@ prices
   $ mkTime <$> [1..fromIntegral (length priceValues)]
   where
     priceValues
-      = Coinbase.Price <$> [1, 3, 2, 10, 7, 12, 8, 11, 4, 6, 5, 9]
+      = Coinbase.Price <$> [1, 3, 2, 10, 7, 12, 8, 11, 4, 6, 5, 9, 12]
 
 
 mkTime :: Integer -> Time.UTCTime

@@ -18,6 +18,7 @@ import qualified Data.Fixed                        as Fixed
 import qualified Data.Text                         as Txt
 import qualified Data.Time.Clock                   as Time
 import qualified Data.Time.Clock.POSIX             as Time
+import qualified GHC.Show                          as Show
 import qualified Servant.API                       as Servant
 import qualified Test.QuickCheck                   as QC
 import qualified Test.QuickCheck.Arbitrary.Generic as QC
@@ -53,7 +54,11 @@ data TradingPair
       { baseCurrency  :: Currency -- ^ BTC in BTC/USD
       , quoteCurrency :: Currency -- ^ USD in BTC/USD
       }
-  deriving stock (Eq, Show, Generic)
+  deriving stock (Eq, Generic)
+
+instance Show.Show TradingPair where
+  show TradingPair{..}
+    = show baseCurrency <> "/" <> show quoteCurrency
 
 instance QC.Arbitrary TradingPair where
   arbitrary = QC.genericArbitrary
