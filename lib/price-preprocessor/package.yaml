@@ -9,6 +9,7 @@ dependencies:
 - base
 - QuickCheck
 - aeson
+- bytestring
 - generic-arbitrary
 - generic-lens
 - protolude

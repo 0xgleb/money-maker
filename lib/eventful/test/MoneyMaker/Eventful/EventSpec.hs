@@ -12,8 +12,9 @@ module MoneyMaker.Eventful.EventSpec
   , exampleUser
 
   , UserCommand(..)
+  , UserCommandError(..)
   , UserAlreadyExistsError(..)
-  , UserDoesntExist(..)
+  , UserDoesntExistError(..)
   )
   where
 
@@ -103,55 +104,56 @@ data UserCommand
   | SetName Text
   | SetRole Role
 
+data UserCommandError
+  = UserAlreadyExists UserAlreadyExistsError
+  | UserDoesntExist UserDoesntExistError
+  deriving stock (Show)
+
 data UserAlreadyExistsError
   = UserAlreadyExistsError
       { message :: !Text
       , userId  :: !(Id "user")
       }
+  deriving stock (Show)
 
-data UserDoesntExist
-  = UserDoesntExist
+data UserDoesntExistError
+  = UserDoesntExistError
       { message :: !Text
       , userId  :: !(Id "user")
       }
+  deriving stock (Show)
 
 instance Command UserCommand UserEvent where
-  type CommandErrors UserCommand =
-    '[ UserAlreadyExistsError
-     , UserDoesntExist
-     ]
+  type CommandError UserCommand = UserCommandError
 
   handleCommand
-    :: ( MonadUltraError m
-       , CommandErrors UserCommand `Elems` errors
-       )
-    => Id "user"
+    :: Id "user"
     -> Maybe User
     -> UserCommand
-    -> m errors (NonEmpty UserEvent)
+    -> Either UserCommandError (NonEmpty UserEvent)
 
   handleCommand userId maybeUser userCommand
     = case (maybeUser, userCommand) of
         (Just _, CreateUser) ->
-          throwUltraError UserAlreadyExistsError
+          Left $ UserAlreadyExists UserAlreadyExistsError
             { message = "Received CreateUser command but this user already exists"
             , userId
             }
         (Nothing, CreateUser) ->
-          pure $ pure UserCreated
+          Right $ pure UserCreated
 
         (Nothing, SetName _) ->
-          throwUltraError UserDoesntExist
+          Left $ UserDoesntExist UserDoesntExistError
             { message = "Received SetName command but this user doesn't exists"
             , userId
             }
         (Just _, SetName name) ->
-          pure $ pure $ NameUpdated name
+          Right $ pure $ NameUpdated name
 
         (Nothing, SetRole _) ->
-          throwUltraError UserDoesntExist
+          Left $ UserDoesntExist UserDoesntExistError
             { message = "Received RoleSet command but this user doesn't exists"
             , userId
             }
         (Just _, SetRole role) ->
-          pure $ pure $ RoleSet role
+          Right $ pure $ RoleSet role

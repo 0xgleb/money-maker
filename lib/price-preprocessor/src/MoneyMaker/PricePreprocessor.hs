@@ -6,6 +6,8 @@ module MoneyMaker.PricePreprocessor
   ( ContractualPriceData
   , toContractualPriceData
 
+  , swingsAggregateId
+
   , ContractualPrediction(..)
 
   , NoNewCandlesFoundError(..)
@@ -14,9 +16,11 @@ module MoneyMaker.PricePreprocessor
   , module Swings
 
   -- Exports for testing:
+  , catchUpWithTheMarket
   , deriveGranularity
   , roundToGranularity
   , generateSwingCommands
+  , SubCandle(..)
   , processSingleCandle
   )
   where
@@ -35,6 +39,8 @@ import qualified Data.Generics.Product             as Generics
 import qualified Data.Time.Clock                   as Time
 import qualified Test.QuickCheck                   as QC
 import qualified Test.QuickCheck.Arbitrary.Generic as QC
+
+import qualified Debug.Trace as Debug
 
 -- Just a placeholder until Python actually sends some useful data
 data ContractualPrediction
@@ -68,7 +74,6 @@ toContractualPriceData
      , Eventful.CouldntDecodeEventError `Error.Elem` errors
      , NoNewCandlesFoundError `Error.Elem` errors
      , Coinbase.ServantClientError `Error.Elem` errors
-     , Coinbase.HeaderError `Error.Elem` errors
      )
   => Coinbase.TickerPriceData
   -> m errors ContractualPriceData
@@ -86,7 +91,7 @@ toContractualPriceData Coinbase.TickerPriceData{ time = currentTime, ..} = do
   swings <-
     if timeSinceLastSavedPrice < 5 * 60 -- if less than 5 minutes passed
     then pure savedSwings
-    else catchUpWithTheMarket productId currentTime
+    else catchUpWithTheMarket productId currentTime savedSwings
 
   pure ContractualPriceData{ time = currentTime, ..}
 
@@ -102,6 +107,8 @@ instance QC.Arbitrary NoNewCandlesFoundError where
   arbitrary = QC.genericArbitrary
   shrink    = QC.genericShrink
 
+class MonadPrinter (m :: [Type] -> Type -> Type) where
+
 catchUpWithTheMarket
   :: ( Eventful.MonadEventStore m
      , Coinbase.CoinbaseRestAPI m
@@ -109,31 +116,25 @@ catchUpWithTheMarket
      , Eventful.CouldntDecodeEventError `Error.Elem` errors
      , NoNewCandlesFoundError `Error.Elem` errors
      , Coinbase.ServantClientError `Error.Elem` errors
-     , Coinbase.HeaderError `Error.Elem` errors
      )
   => Coinbase.TradingPair
   -> Time.UTCTime
+  -> Swings
   -> m errors Swings
 
-catchUpWithTheMarket productId currentTime = do
-  savedSwings <-
-    Error.catchVoid (Eventful.getAggregate @SwingEvent swingsAggregateId)
-      -- TODO: cover the case when there are no saved prices
-      -- $ Error.catchUltraError @NoEventsFoundError
-      --     $ \
-
+catchUpWithTheMarket productId currentTime savedSwings = do
   let timeOfPreviousSave
-        = getTime $ getLastPrice savedSwings
+        = Debug.traceShowId $ getTime $ getLastPrice savedSwings
 
       granularity -- TODO: throw an error if the difference is negative
-        = deriveGranularity $ Time.diffUTCTime currentTime timeOfPreviousSave
+        = Debug.traceShowId $ deriveGranularity $ Time.diffUTCTime currentTime timeOfPreviousSave
 
   -- TODO: you need to make sure you're not requesting more than 300 candles
   consolidatedCandles <-
     consolidateCandles . fmap Generics.upcast
       <$> Coinbase.getCandles productId
-            (Just $ roundToGranularity granularity timeOfPreviousSave)
-            (Just $ roundToGranularity granularity currentTime)
+            (roundToGranularity granularity timeOfPreviousSave)
+            (roundToGranularity granularity currentTime)
             (restrictedGranularityToCoinbaseGranularity granularity)
 
   let swingCommands
@@ -142,7 +143,7 @@ catchUpWithTheMarket productId currentTime = do
             savedSwings
             consolidatedCandles
 
-  newSwings <- case swingCommands of
+  newSwings <- case Debug.traceShowId swingCommands of
     Left error ->
       Error.throwUltraError error
 
@@ -150,7 +151,7 @@ catchUpWithTheMarket productId currentTime = do
       swings <- Eventful.applyCommand swingsAggregateId command
 
       foldM
-        (const $ Eventful.applyCommand swingsAggregateId)
+        (\_swings nextCommand -> Eventful.applyCommand swingsAggregateId nextCommand)
         swings
         commands
 
@@ -160,13 +161,18 @@ catchUpWithTheMarket productId currentTime = do
       -- deriveGranularity, if we needed more than 300 OneMinute candles
       -- we would request OneHour candles instead. So if the last request
       -- that we did was in minutes then we don't need to get more candles
-      pure newSwings
+      pure $ Debug.traceShowId newSwings
 
     OneHour ->
-      catchUpWithTheMarket productId currentTime
+      uncurry2 catchUpWithTheMarket $ Debug.traceShowId (productId, currentTime, newSwings)
 
     OneDay ->
-      catchUpWithTheMarket productId currentTime
+      uncurry2 catchUpWithTheMarket $ Debug.traceShowId (productId, currentTime, newSwings)
+
+  where
+    uncurry2 f (a, b, c)
+      = f a b c
+
 
 data RestrictedGranularity
   = OneMinute
@@ -185,6 +191,18 @@ restrictedGranularityToCoinbaseGranularity = \case
   OneMinute -> Coinbase.OneMinute
   OneHour   -> Coinbase.OneHour
   OneDay    -> Coinbase.OneDay
+
+-- granularityToTime :: RestrictedGranularity -> Time.NominalDiffTime
+-- granularityToTime = \case
+--   OneMinute -> minute
+--   OneHour   -> hour
+--   OneDay    -> day
+
+--   where
+--     minute = 60
+--     hour   = 60 * minute
+--     day    = 24 * hour
+
 
 deriveGranularity :: Time.NominalDiffTime -> RestrictedGranularity
 deriveGranularity timeDifference
@@ -233,52 +251,83 @@ generateSwingCommands error savedSwings = \case
     Left error
 
   OneCandle candle ->
-    Right $ processSingleCandle (Generics.upcast candle) savedSwings
+    Right $ processSingleCandle savedSwings $ Generics.upcast candle
 
-  ConsolidatedCandles extremums ->
-    Right $ join $ extremums <&> \ConsolidatedExtremums{..} ->
-      let (earlierExtremum, laterExtremum) =
-            -- TODO: if consolidatedLow and consolidatedHigh were reached in the
-            -- same candle then we arbitrarily decide that the low came earlier.
-            -- A better approach would be to use the single candle resolution
-            -- mechanism to deal with this
-            if getTime consolidatedLow < getTime consolidatedHigh
-            then (consolidatedLow, consolidatedHigh)
-            else (consolidatedHigh, consolidatedLow)
+  ConsolidatedCandles (lastCandleToCommands -> tailCommands) extremums ->
+    Right $ addTailCommands tailCommands
+      $ join $ extremums <&> \ConsolidatedExtremums{..} ->
+          if getTime consolidatedLow == getTime consolidatedHigh
+          then processSingleCandle savedSwings $ SubCandle
+                { time = getTime consolidatedLow
+                , low  = getPrice consolidatedLow
+                , high = getPrice consolidatedHigh
+                }
 
-      in [AddNewPrice earlierExtremum, AddNewPrice laterExtremum]
+          else
+            let (earlierExtremum, laterExtremum) =
+                  -- TODO: if consolidatedLow and consolidatedHigh were reached in the
+                  -- same candle then we arbitrarily decide that the low came earlier.
+                  -- A better approach would be to use the single candle resolution
+                  -- mechanism to deal with this
+                  if getTime consolidatedLow < getTime consolidatedHigh
+                  then (consolidatedLow, consolidatedHigh)
+                  else (consolidatedHigh, consolidatedLow)
+
+            in [AddNewPrice earlierExtremum, AddNewPrice laterExtremum]
+
+  where
+    addTailCommands tailCommands (command :| commands)
+      = command :| (commands <> tailCommands)
+
+    lastCandleToCommands :: Maybe Coinbase.Candle -> [SwingCommand]
+    lastCandleToCommands = maybe [] \Coinbase.Candle{..} ->
+      [ AddNewPrice TimedPrice{ price = open, time } ]
+
+-- | A candle with only high, low, and time (no, open, close, etc)
+data SubCandle
+  = SubCandle
+      { high :: Coinbase.Price
+      , low  :: Coinbase.Price
+      , time :: Time.UTCTime
+      }
+  deriving stock (Generic, Show, Eq)
+
+instance QC.Arbitrary SubCandle where
+  arbitrary = QC.genericArbitrary
+  shrink    = QC.genericShrink
 
 -- | We need to know the order of highs and lows to construct swings.
 -- However, when we have only one new candle, we don't know if the high or the
 -- low came first. This function aims to sensibly resolve this problem.
 -- You can find an explanation with a diagram in docs/resolve-order-ambiguity.png
 processSingleCandle
-  :: SubCandle
-  -> Swings
+  :: Swings
+  -> SubCandle
   -> NonEmpty SwingCommand
 
-processSingleCandle SubCandle{ high = newHigh, low = newLow, ..} = \case
-  SwingUp High{ previousLow = Nothing, price = oldHigh } ->
-    if newHigh > oldHigh
-    then [saveNewHigh, saveNewLow]
-    else [saveNewLow , saveNewHigh]
+processSingleCandle savedSwings SubCandle{ high = newHigh, low = newLow, ..}
+  = case savedSwings of
+      SwingUp High{ previousLow = Nothing, price = oldHigh } ->
+        if newHigh > oldHigh
+        then [saveNewHigh, saveNewLow]
+        else [saveNewLow , saveNewHigh]
 
-  SwingDown Low{ previousHigh = Nothing, price = oldLow } ->
-    if newLow < oldLow
-    then [saveNewLow , saveNewHigh]
-    else [saveNewHigh, saveNewLow]
+      SwingDown Low{ previousHigh = Nothing, price = oldLow } ->
+        if newLow < oldLow
+        then [saveNewLow , saveNewHigh]
+        else [saveNewHigh, saveNewLow]
 
-  SwingUp previousHigh@High{ previousLow = Just previousLow } ->
-    resolveExtremumOrderAmbiguity
-      True
-      (getPrice previousHigh)
-      (getPrice previousLow)
+      SwingUp previousHigh@High{ previousLow = Just previousLow } ->
+        resolveExtremumOrderAmbiguity
+          True
+          (getPrice previousHigh)
+          (getPrice previousLow)
 
-  SwingDown previousLow@Low{ previousHigh = Just previousHigh } ->
-    resolveExtremumOrderAmbiguity
-      False
-      (getPrice previousHigh)
-      (getPrice previousLow)
+      SwingDown previousLow@Low{ previousHigh = Just previousHigh } ->
+        resolveExtremumOrderAmbiguity
+          False
+          (getPrice previousHigh)
+          (getPrice previousLow)
 
   where
     -- TODO: consider putting in different times so that you can sort by them

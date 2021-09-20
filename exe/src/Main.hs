@@ -18,7 +18,7 @@ import qualified Control.Monad.Logger        as Logger
 import qualified Data.Aeson                  as Aeson
 import qualified Data.Pool                   as Pool
 import qualified Data.Text.Lazy.IO           as Txt.LIO
-import qualified Data.Time.Clock             as Time
+import qualified Data.Time                   as Time
 import qualified Database.Persist.Postgresql as Postgres
 import qualified Database.Persist.Sql        as Persist
 import qualified Paths_exe                   as Path
@@ -32,16 +32,14 @@ deriving newtype instance Eventful.MonadEventStore m
 
 main :: IO ()
 main = do
-  Time.UTCTime{..} <- Time.getCurrentTime
-
   Error.runUltraExceptTWithoutErrors $ Coinbase.runSandboxCoinbaseRestT
     $ Error.handleAllErrors
         @'[Coinbase.ServantClientError, Coinbase.HeaderError]
         ( print =<< Coinbase.getCandles
             (Coinbase.TradingPair Coinbase.BTC Coinbase.USD)
-            (Just (Time.UTCTime utctDay utctDayTime))
-            (Just Time.UTCTime{..})
-            Coinbase.OneDay
+            (Time.UTCTime (Time.fromGregorian 2021 9 12) (17 * 60 * 60))
+            (Time.UTCTime (Time.fromGregorian 2021 9 12) (17 * 60 * 60 + 55 * 60))
+            Coinbase.OneMinute
         )
         print
         print

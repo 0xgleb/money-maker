@@ -6,11 +6,14 @@ module MoneyMaker.PricePreprocessorSpec
   where
 
 import MoneyMaker.PricePreprocessor.SwingsSpec (mkTime)
+import MoneyMaker.PricePreprocessor.TestMonad
 
 import MoneyMaker.PricePreprocessor
 import MoneyMaker.PricePreprocessor.ConsolidatedCandles
 
 import qualified MoneyMaker.Coinbase.SDK as Coinbase
+import qualified MoneyMaker.Error        as Error
+import qualified MoneyMaker.Eventful     as Eventful
 
 import Protolude
 import Test.Hspec
@@ -29,7 +32,73 @@ spec =  do
 
   describeRoundToGranularity
 
-  -- TODO: describe catchUpWithTheMarket
+  describeCatchUpWithTheMarket
+
+type CatchUpWithTheMarketErrors =
+  '[ Eventful.NoEventsFoundError
+   , Eventful.CouldntDecodeEventError
+   , NoNewCandlesFoundError
+   , Coinbase.ServantClientError
+   ]
+
+describeCatchUpWithTheMarket :: Spec
+describeCatchUpWithTheMarket = describe "catchUpWithTheMarket" do
+  it "passes the example test case" do
+    let initialEvents
+          = AddNewPrice TimedPrice
+              { time  = Time.UTCTime (Time.fromGregorian 2021 8 30) 0
+              , price = Coinbase.Price 48815.00
+              }
+          & Eventful.handleCommand swingsAggregateId Nothing
+          & \case
+              Left voidError ->
+                absurd voidError
+
+              Right (event :| events) ->
+                fmap (Eventful.toStorableEvent swingsAggregateId)
+                  $ event : events
+
+    let minute = 60
+        hour   = 60 * minute
+
+        Right (result, eventStore)
+          = runPricePreprocessorMonad @CatchUpWithTheMarketErrors initialEvents do
+              savedSwings <- Error.catchVoid (Eventful.getAggregate @SwingEvent swingsAggregateId)
+              void $ catchUpWithTheMarket
+                  (Coinbase.TradingPair Coinbase.BTC Coinbase.USD)
+                  ( Time.UTCTime
+                      (Time.fromGregorian 2021 9 12)
+                      (17 * hour + 55 * minute + 37))
+                  savedSwings
+              Error.catchVoid (Eventful.getAggregate @SwingEvent swingsAggregateId)
+
+        mkTime' day hours minutes
+          = Time.UTCTime
+              { utctDay     = Time.fromGregorian 2021 9 day
+              , utctDayTime = hours * hour + minutes * minute
+              }
+
+        expectedSwings
+          = SwingDown
+                 $ Low  (Coinbase.Price 45913.97) (mkTime' 12 17 55)
+          $ Just $ High (Coinbase.Price 46021.38) (mkTime' 12 17 54)
+          $ Just $ Low  (Coinbase.Price 45873.98) (mkTime' 12 17 53)
+          $ Just $ High (Coinbase.Price 46071.38) (mkTime' 12 17 5)
+          $ Just $ Low  (Coinbase.Price 45854.80) (mkTime' 12 17 3)
+          $ Just $ High (Coinbase.Price 46071.38) (mkTime' 12 17 2)
+          $ Just $ Low  (Coinbase.Price 45854.73) (mkTime' 12 17 2)
+          $ Just $ High (Coinbase.Price 46095.17) (mkTime' 12 16 0)
+          $ Just $ Low  (Coinbase.Price 45792.61) (mkTime' 12 15 0)
+          $ Just $ High (Coinbase.Price 48633.50) (mkTime' 12 12 0)
+          $ Just $ Low  (Coinbase.Price 41317.00) (mkTime' 12 0  0)
+          $ Just $ High (Coinbase.Price 56000.00) (mkTime' 11 0  0)
+          $ Just $ Low  (Coinbase.Price 25000.00) (mkTime' 3  0  0)
+              Nothing
+
+    print eventStore
+
+    result `shouldBe` expectedSwings
+
 
 describeRoundToGranularity :: Spec
 describeRoundToGranularity = describe "roundToGranularity" do
@@ -57,7 +126,7 @@ describeRoundToGranularity = describe "roundToGranularity" do
 
 describeDeriveGranularity :: Spec
 describeDeriveGranularity = describe "deriveGranularity" do
-  it "returns days when the time difference is more than a day"
+  it "returns days when the time difference is more than 2 days"
     $ property \startTime@Time.UTCTime{..} ((+ 1) . abs -> positiveInteger) ->
         let endTime = Time.UTCTime
               { utctDay = positiveInteger `Time.addDays` utctDay
@@ -96,27 +165,42 @@ describeGenerateSwingCommands = describe "generateSwingCommands" do
   it "calls processSingleCandle when there is only one new candle"
     $ property \error swings candle ->
         generateSwingCommands error swings (OneCandle candle)
-          `shouldBe` Right (processSingleCandle (Generics.upcast candle) swings)
+          `shouldBe` Right (processSingleCandle swings $ Generics.upcast candle)
 
-  it "generates the same commands if you turn the commands into candles"
+  it "generates the same commands if you turn the commands into candles - without last candle"
     $ property \error swings (ArbitraryExtremums extremums) ->
-        case generateSwingCommands error swings (ConsolidatedCandles extremums) of
+        case generateSwingCommands error swings (ConsolidatedCandles Nothing extremums) of
           Left _ ->
             expectationFailure "Should only fail when given NoCandles"
 
           expectedResult@(Right (command :| commands)) ->
             let pretendCandles
                   = (command : commands) <&> \(AddNewPrice TimedPrice{..}) ->
-                      SubCandle price price time
+                      Coinbase.Candle time price price price price
 
             in generateSwingCommands error swings (consolidateCandles pretendCandles)
                  `shouldBe` expectedResult
+
+  -- TODO: test the scenario when there is a last candle
+  -- it "generates the same commands if you turn the commands into candles - with last candle"
+  --   $ property \error swings lastCandle (ArbitraryExtremums extremums) ->
+  --       case generateSwingCommands error swings (ConsolidatedCandles (Just lastCandle) extremums) of
+  --         Left _ ->
+  --           expectationFailure "Should only fail when given NoCandles"
+
+  --         expectedResult@(Right (command :| commands)) ->
+  --           let pretendCandles
+  --                 = (command : commands) <&> \(AddNewPrice TimedPrice{..}) ->
+  --                     Coinbase.Candle price price price price time
+
+  --           in generateSwingCommands error swings (consolidateCandles pretendCandles)
+  --                `shouldBe` expectedResult
 
   it "saves ConsolidatedExtremums in order" do
     let mkTimedPrice (mkTime -> time) (Coinbase.Price -> price)
           = TimedPrice{..}
 
-        lowFirstExtremums = ConsolidatedCandles
+        lowFirstExtremums = ConsolidatedCandles Nothing
           [ ConsolidatedExtremums
               { consolidatedLow  = mkTimedPrice 5 5
               , consolidatedHigh = mkTimedPrice 6 12
@@ -128,7 +212,7 @@ describeGenerateSwingCommands = describe "generateSwingCommands" do
               }
           ]
 
-        highFirstExtremums = ConsolidatedCandles
+        highFirstExtremums = ConsolidatedCandles Nothing
           [ ConsolidatedExtremums
               { consolidatedLow  = mkTimedPrice 6 5
               , consolidatedHigh = mkTimedPrice 5 12
@@ -195,9 +279,9 @@ describeProcessSingleCandle = describe "processSingleCandle" do
               , time  = mkTime 5
               }
 
-    processSingleCandle candle upSwings `shouldBe` expectedUpSwingsResult
+    processSingleCandle upSwings candle `shouldBe` expectedUpSwingsResult
 
-    processSingleCandle candle downSwings `shouldBe` expectedDownSwingsResult
+    processSingleCandle downSwings candle `shouldBe` expectedDownSwingsResult
 
 
   it "resolves extremum order ambiguity when previous high is invalidated" do
@@ -213,8 +297,8 @@ describeProcessSingleCandle = describe "processSingleCandle" do
               , time  = mkTime 5
               }
 
-    processSingleCandle candle upSwings `shouldBe` expectedResult
-    processSingleCandle candle downSwings `shouldBe` expectedResult
+    processSingleCandle upSwings candle `shouldBe` expectedResult
+    processSingleCandle downSwings candle `shouldBe` expectedResult
 
 
   it "resolves extremum order ambiguity when previous low is invalidated" do
@@ -230,8 +314,8 @@ describeProcessSingleCandle = describe "processSingleCandle" do
               , time  = mkTime 5
               }
 
-    processSingleCandle candle upSwings `shouldBe` expectedResult
-    processSingleCandle candle downSwings `shouldBe` expectedResult
+    processSingleCandle upSwings candle `shouldBe` expectedResult
+    processSingleCandle downSwings candle `shouldBe` expectedResult
 
   it "resolves extremum order ambiguity when both extremums are invalidated" do
     let candle = SubCandle
@@ -264,9 +348,9 @@ describeProcessSingleCandle = describe "processSingleCandle" do
               }
           ]
 
-    processSingleCandle candle upSwings `shouldBe` expectedUpSwingsResult
+    processSingleCandle upSwings candle `shouldBe` expectedUpSwingsResult
 
-    processSingleCandle candle downSwings `shouldBe` expectedDownSwingsResult
+    processSingleCandle downSwings candle `shouldBe` expectedDownSwingsResult
 
 
 upSwings :: Swings

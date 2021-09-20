@@ -65,7 +65,7 @@ instance (forall errors. Monad (m errors))
       = pure "api.pro.coinbase.com"
 
 
-instance
+instance {-# OVERLAPPABLE #-}
   ( Error.MonadUltraError m
   , forall errors. MonadIO (m errors)
   , HasBaseUrlHost m
@@ -74,10 +74,8 @@ instance
     getCandles productId startTime endTime granularity
       = getCandlesServant productId
           (Just $ UserAgentHeader "Haskell: servant-client")
-          startTime
-          endTime
-          -- (Just startTime)
-          -- (Just endTime)
+          (Just startTime)
+          (Just endTime)
           (Just granularity)
 
 

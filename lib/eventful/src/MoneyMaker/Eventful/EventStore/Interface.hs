@@ -34,7 +34,7 @@ applyCommand
      , MonadEventStore m
      , EventError event `Elem` errors
      , CouldntDecodeEventError `Elem` errors
-     , CommandErrors command `Elems` errors
+     , CommandError command `Elem` errors
      , EventError event `Elem` errors
      , Eventful event
      )
@@ -45,8 +45,13 @@ applyCommand = applyCommandWithProxy $ Proxy @event
 
 data CouldntDecodeEventError
   = CouldntDecodeEventError Prelude.String
+  deriving stock (Show)
 
 class MonadUltraError m => MonadEventStore (m :: [Type] -> Type -> Type) where
+  type MonomorphicEvent m :: Type
+
+  dumpTheEventStore :: m errors [MonomorphicEvent m]
+
   getAggregateWithProxy
     :: ( NoEventsFoundError `Elem` errors
        , EventError event `Elem` errors
@@ -61,7 +66,7 @@ class MonadUltraError m => MonadEventStore (m :: [Type] -> Type -> Type) where
     :: ( Command command event
        , EventError event `Elem` errors
        , CouldntDecodeEventError `Elem` errors
-       , CommandErrors command `Elems` errors
+       , CommandError command `Elem` errors
        , EventError event `Elem` errors
        , Eventful event
        )

@@ -91,9 +91,23 @@ data OneOf (xs :: [Type]) where
   -- to the right position
   Other :: OneOf xs -> OneOf (y : xs)
 
--- TODO: implement this. required for unit tests
-instance Prelude.Show (OneOf xs) where
-  show = Prelude.error "implement OneOf show"
+instance {-# INCOHERENT #-}
+  ( Prelude.Show x
+  , Prelude.Show (OneOf xs)
+  ) => Prelude.Show (OneOf (x:xs))
+  where
+    show = \case
+      ThisOne val ->
+        show val
+      Other rest ->
+        show rest
+
+instance Prelude.Show x => Prelude.Show (OneOf '[x]) where
+  show = \case
+    ThisOne val ->
+      show val
+    Other rest ->
+      case rest of
 
 -- TODO: implement this. required for unit tests
 instance Prelude.Eq (OneOf xs) where

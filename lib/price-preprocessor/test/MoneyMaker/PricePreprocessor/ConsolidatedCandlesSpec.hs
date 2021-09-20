@@ -21,9 +21,9 @@ spec = describe "consolidateCandles" do
   it "always returns ConsolidatedExtremums{..} when there are at least 2 candles"
     $ property \candle anotherCandle candles ->
         case consolidateCandles (candle : anotherCandle : candles) of
-          NoCandles             -> False
-          OneCandle _           -> False
-          ConsolidatedCandles _ -> True
+          NoCandles               -> False
+          OneCandle _             -> False
+          ConsolidatedCandles _ _ -> True
 
   it "always returns the candle given to it when there is only 1 candle"
     $ property \candle ->
@@ -34,32 +34,40 @@ spec = describe "consolidateCandles" do
 
   it "correctly extracts the highs and lows" do
     let candles =
-          [ SubCandle
+          [ Coinbase.Candle
               { time  = mkTime 1
+              , open  = Coinbase.Price 3
               , low   = Coinbase.Price 2
               , high  = Coinbase.Price 4
+              , close = Coinbase.Price 3
               }
 
-          , SubCandle
+          , Coinbase.Candle
               { time  = mkTime 2
+              , open  = Coinbase.Price 2
               , low   = Coinbase.Price 1
               , high  = Coinbase.Price 3
+              , close = Coinbase.Price 2
               }
 
-          , SubCandle
+          , Coinbase.Candle
               { time  = mkTime 3
+              , open  = Coinbase.Price 2
               , low   = Coinbase.Price 2
               , high  = Coinbase.Price 3
+              , close = Coinbase.Price 2
               }
 
-          , SubCandle
+          , Coinbase.Candle
               { time  = mkTime 4
+              , open  = Coinbase.Price 3
               , low   = Coinbase.Price 3
               , high  = Coinbase.Price 4
+              , close = Coinbase.Price 4
               }
           ]
 
-        expectedResult = ConsolidatedCandles
+        expectedResult = ConsolidatedCandles Nothing
           [ ConsolidatedExtremums
               { consolidatedHigh = TimedPrice
                   { time  = mkTime 1
@@ -89,32 +97,51 @@ spec = describe "consolidateCandles" do
 
   it "gives the same result regardless of the order of the items" do
     let candles =
-          [ SubCandle
+          [ Coinbase.Candle
               { time  = mkTime 1
+              , open  = Coinbase.Price 15
               , low   = Coinbase.Price 1
               , high  = Coinbase.Price 30
+              , close = Coinbase.Price 15
               }
 
-          , SubCandle
+          , Coinbase.Candle
               { time  = mkTime 2
+              , open  = Coinbase.Price 25
               , low   = Coinbase.Price 1
               , high  = Coinbase.Price 50
+              , close = Coinbase.Price 25
               }
 
-          , SubCandle
+          , Coinbase.Candle
               { time  = mkTime 3
+              , open  = Coinbase.Price 20
               , low   = Coinbase.Price 10
               , high  = Coinbase.Price 30
+              , close = Coinbase.Price 20
               }
 
-          , SubCandle
+          , Coinbase.Candle
               { time  = mkTime 4
+              , open  = Coinbase.Price 30
               , low   = Coinbase.Price 20
               , high  = Coinbase.Price 40
+              , close = Coinbase.Price 30
               }
+
+          , lastCandle
           ]
 
-        expectedResult = ConsolidatedCandles
+        lastCandle
+          = Coinbase.Candle
+              { time  = mkTime 5
+              , open  = Coinbase.Price 30
+              , low   = Coinbase.Price 30
+              , high  = Coinbase.Price 30
+              , close = Coinbase.Price 30
+              }
+
+        expectedResult = ConsolidatedCandles (Just lastCandle)
           [ ConsolidatedExtremums
               { consolidatedLow = TimedPrice
                   { price = Coinbase.Price 1

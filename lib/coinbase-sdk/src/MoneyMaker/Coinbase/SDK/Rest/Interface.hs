@@ -27,8 +27,8 @@ class Error.MonadUltraError m => CoinbaseRestAPI m where
     :: ( ServantClientError `Error.Elem` errors
        )
     => TradingPair
-    -> Maybe (Time.UTCTime)
-    -> Maybe (Time.UTCTime)
+    -> Time.UTCTime
+    -> Time.UTCTime
     -> Granularity
     -> m errors [Candle]
 

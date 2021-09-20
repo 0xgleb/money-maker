@@ -75,6 +75,7 @@ data TimedPrice
       , time  :: Time.UTCTime
       }
   deriving stock (Show, Eq, Generic)
+  deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
 instance QC.Arbitrary TimedPrice where
   arbitrary = QC.genericArbitrary
@@ -98,8 +99,8 @@ getPrice
 
 
 data SwingEvent
-  = NewHighReached Coinbase.Price Time.UTCTime
-  | NewLowReached Coinbase.Price Time.UTCTime
+  = NewHighReached TimedPrice
+  | NewLowReached TimedPrice
   deriving stock (Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
@@ -109,23 +110,23 @@ instance Eventful.Eventful SwingEvent where
   type EventError     SwingEvent = Void
 
   applyEvent Nothing event = pure $ case event of
-    NewHighReached price time ->
+    NewHighReached TimedPrice{..} ->
       SwingUp $ High price time Nothing
-    NewLowReached price time ->
+    NewLowReached TimedPrice{..} ->
       SwingDown $ Low price time Nothing
 
   applyEvent (Just aggregate) event
     = pure $ case (aggregate, event) of
-        ( SwingUp High{previousLow}, NewHighReached price time ) ->
+        ( SwingUp High{previousLow}, NewHighReached TimedPrice{..} ) ->
           SwingUp High{..}
 
-        ( SwingDown Low{previousHigh}, NewLowReached price time ) ->
+        ( SwingDown Low{previousHigh}, NewLowReached TimedPrice{..} ) ->
           SwingDown Low{..}
 
-        ( SwingDown low, NewHighReached price time ) ->
+        ( SwingDown low, NewHighReached TimedPrice{..} ) ->
           SwingUp $ addNewHigh price time low
 
-        ( SwingUp high, NewLowReached price time ) ->
+        ( SwingUp high, NewLowReached TimedPrice{..} ) ->
           SwingDown $ addNewLow price time high
 
 
@@ -165,16 +166,17 @@ data SwingCommand
   deriving stock (Eq, Show)
 
 instance Eventful.Command SwingCommand SwingEvent where
-  type CommandErrors SwingCommand = '[]
+  type CommandError SwingCommand = Void
 
   handleCommand _id Nothing (AddNewPrice TimedPrice{..})
-    = pure $ NewLowReached price time :| []
+    = pure $ NewLowReached TimedPrice{..} :| []
 
   handleCommand _id (Just swings) (AddNewPrice TimedPrice{ price = newPrice, ..})
     = let previousPrice = case swings of
             SwingUp   High{price} -> price
             SwingDown Low{price}  -> price
 
-      in pure $ if newPrice > previousPrice
-           then NewHighReached newPrice time :| []
-           else NewLowReached newPrice time :| []
+      in pure
+           if newPrice > previousPrice
+           then NewHighReached TimedPrice{ price = newPrice, time } :| []
+           else NewLowReached TimedPrice{ price = newPrice, time } :| []

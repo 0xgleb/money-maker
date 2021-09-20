@@ -4,11 +4,9 @@
 module MoneyMaker.PricePreprocessor.ConsolidatedCandles
   ( ConsolidatedCandles(..)
   , ConsolidatedExtremums(..)
-  , SubCandle(..)
+  , consolidateCandles
 
   , ArbitraryExtremums(..)
-
-  , consolidateCandles
   )
   where
 
@@ -18,17 +16,95 @@ import qualified MoneyMaker.Coinbase.SDK as Coinbase
 
 import Protolude
 
-import qualified Data.List.NonEmpty                as NE
-import qualified Data.Time                         as Time
-import qualified Protolude.Partial                 as Partial
-import qualified Test.QuickCheck                   as QC
-import qualified Test.QuickCheck.Arbitrary.Generic as QC
+import qualified Data.List.NonEmpty as NE
+import qualified Protolude.Partial  as Partial
+import qualified Test.QuickCheck    as QC
 
 data ConsolidatedCandles
   = NoCandles
-  | OneCandle SubCandle
-  | ConsolidatedCandles (NonEmpty ConsolidatedExtremums)
+  | OneCandle Coinbase.Candle
+  | ConsolidatedCandles (Maybe Coinbase.Candle) (NonEmpty ConsolidatedExtremums)
   deriving stock (Show, Eq)
+
+data ConsolidatedExtremums
+  = ConsolidatedExtremums
+      { consolidatedLow  :: TimedPrice
+      , consolidatedHigh :: TimedPrice
+      }
+  deriving stock (Generic, Show, Eq)
+
+consolidateCandles :: [Coinbase.Candle] -> ConsolidatedCandles
+consolidateCandles (sortOn getTime -> orderedCandles)
+  = case foldl consolidateACandle NoCandles orderedCandles of
+      consolidated@(ConsolidatedCandles _ (ConsolidatedExtremums{..} :| _)) ->
+        let isLater Coinbase.Candle{time}
+              =  time > getTime consolidatedLow
+              && time > getTime consolidatedHigh
+
+            laterCandles = filter isLater orderedCandles
+
+        in case consolidateCandles laterCandles of
+             ConsolidatedCandles lastCandle laterExtremums ->
+               ConsolidatedCandles lastCandle
+                $ [ConsolidatedExtremums{..}] <> laterExtremums
+
+             OneCandle candle ->
+               ConsolidatedCandles (Just candle) [ConsolidatedExtremums{..}]
+
+             NoCandles -> consolidated
+
+      consolidated -> consolidated
+
+  where
+    consolidateACandle consolidatedCandle nextCandle
+      = case consolidatedCandle of
+          NoCandles ->
+            OneCandle nextCandle
+
+          OneCandle consolidated ->
+            ConsolidatedCandles Nothing $ pure ConsolidatedExtremums
+              { consolidatedLow =
+                  if Coinbase.low nextCandle < Coinbase.low consolidated
+                  then TimedPrice
+                          { time  = getTime nextCandle
+                          , price = Coinbase.low nextCandle
+                          }
+                  else TimedPrice
+                          { time  = getTime consolidated
+                          , price = Coinbase.low consolidated
+                          }
+
+              , consolidatedHigh =
+                  if Coinbase.high nextCandle > Coinbase.high consolidated
+                  then TimedPrice
+                          { time  = getTime nextCandle
+                          , price = Coinbase.high nextCandle
+                          }
+                  else TimedPrice
+                          { time  = getTime consolidated
+                          , price = Coinbase.high consolidated
+                          }
+              }
+
+          ConsolidatedCandles _ (ConsolidatedExtremums{..} :| _) ->
+            ConsolidatedCandles Nothing $ pure ConsolidatedExtremums
+              { consolidatedLow =
+                  if Coinbase.low nextCandle < getPrice consolidatedLow
+                  then TimedPrice
+                          { time  = getTime nextCandle
+                          , price = Coinbase.low nextCandle
+                          }
+                  else consolidatedLow
+
+              , consolidatedHigh =
+                  if Coinbase.high nextCandle > getPrice consolidatedHigh
+                  then TimedPrice
+                          { time  = getTime nextCandle
+                          , price = Coinbase.high nextCandle
+                          }
+                  else consolidatedHigh
+              }
+
 
 newtype ArbitraryExtremums
   = ArbitraryExtremums (NonEmpty ConsolidatedExtremums)
@@ -65,93 +141,3 @@ instance QC.Arbitrary ArbitraryExtremums where
               (Partial.tail $ Partial.init prices)
 
       constructExtremumsList _ _ = pure []
-
-
-data ConsolidatedExtremums
-  = ConsolidatedExtremums
-      { consolidatedLow  :: TimedPrice
-      , consolidatedHigh :: TimedPrice
-      }
-  deriving stock (Generic, Show, Eq)
-
--- | A candle with only high, low, and time (no, open, close, etc)
-data SubCandle
-  = SubCandle
-      { high :: Coinbase.Price
-      , low  :: Coinbase.Price
-      , time :: Time.UTCTime
-      }
-  deriving stock (Generic, Show, Eq)
-
-instance QC.Arbitrary SubCandle where
-  arbitrary = QC.genericArbitrary
-  shrink    = QC.genericShrink
-
-consolidateCandles :: [SubCandle] -> ConsolidatedCandles
-consolidateCandles (sortOn getTime -> orderedCandles)
-  = case foldl consolidateACandle NoCandles orderedCandles of
-      consolidated@(ConsolidatedCandles (ConsolidatedExtremums{..} :| _)) ->
-        let isLater SubCandle{time}
-              =  time > getTime consolidatedLow
-              && time > getTime consolidatedHigh
-
-            laterCandles = filter isLater orderedCandles
-
-        in case consolidateCandles laterCandles of
-             ConsolidatedCandles laterExtremums ->
-               ConsolidatedCandles
-                $ [ConsolidatedExtremums{..}] <> laterExtremums
-
-             _ -> consolidated
-
-      consolidated -> consolidated
-
-  where
-    consolidateACandle consolidatedCandle nextCandle
-      = case consolidatedCandle of
-          NoCandles ->
-            OneCandle nextCandle
-
-          OneCandle consolidated ->
-            ConsolidatedCandles $ pure ConsolidatedExtremums
-              { consolidatedLow =
-                  if low nextCandle < low consolidated
-                  then TimedPrice
-                          { time  = getTime nextCandle
-                          , price = low nextCandle
-                          }
-                  else TimedPrice
-                          { time  = getTime consolidated
-                          , price = low consolidated
-                          }
-
-              , consolidatedHigh =
-                  if high nextCandle > high consolidated
-                  then TimedPrice
-                          { time  = getTime nextCandle
-                          , price = high nextCandle
-                          }
-                  else TimedPrice
-                          { time  = getTime consolidated
-                          , price = high consolidated
-                          }
-              }
-
-          ConsolidatedCandles (ConsolidatedExtremums{..} :| _) ->
-            ConsolidatedCandles $ pure ConsolidatedExtremums
-              { consolidatedLow =
-                  if low nextCandle < getPrice consolidatedLow
-                  then TimedPrice
-                          { time  = getTime nextCandle
-                          , price = low nextCandle
-                          }
-                  else consolidatedLow
-
-              , consolidatedHigh =
-                  if high nextCandle > getPrice consolidatedHigh
-                  then TimedPrice
-                          { time  = getTime nextCandle
-                          , price = high nextCandle
-                          }
-                  else consolidatedHigh
-              }
