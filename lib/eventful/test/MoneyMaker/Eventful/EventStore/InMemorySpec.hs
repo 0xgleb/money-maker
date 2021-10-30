@@ -1,4 +1,7 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE QuasiQuotes           #-}
+
+{-# OPTIONS_GHC -Wwarn=partial-type-signatures #-}
 
 module MoneyMaker.Eventful.EventStore.InMemorySpec
   ( spec
@@ -20,15 +23,21 @@ spec :: Spec
 spec = do
   describe "MonadEventStore InMemoryEventStoreT" do
     it "executing testEventStoreProcedure results in the expected user aggregate" do
-      let result :: Either (OneOf TestEventStoreProcedureErrors) (User, User)
+      let result :: Either (OneOf TestEventStoreProcedureErrors) _
             = fmap fst . runIdentity $ runInMemoryEventStoreT initialEventStore do
                 firstAggregate <- testEventStoreProcedure
+
+                eventStoreBefore <- dumpEventStore
+
+                catchUltraError (throwUltraError ()) (\() -> pure ())
+
+                eventStoreAfter <- dumpEventStore
 
                 void $ applyCommand userAggregateId $ SetName "Tester"
 
                 secondAggregate <- getAggregate userAggregateId
 
-                pure (firstAggregate, secondAggregate)
+                pure (firstAggregate, secondAggregate, eventStoreBefore, eventStoreAfter)
 
       case result of
         Left error ->
@@ -36,7 +45,9 @@ spec = do
             $ "Test procedure should have succeeded but failed with error: "
                 <> show error
 
-        Right (firstAggregate, secondAggregate) -> do
+        Right (firstAggregate, secondAggregate, eventStoreBefore, eventStoreAfter) -> do
+          eventStoreBefore `shouldBe` eventStoreAfter
+
           firstAggregate  `shouldBe` exampleUser
           secondAggregate `shouldBe` exampleUser { name = Just "Tester" }
 

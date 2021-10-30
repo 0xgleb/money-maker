@@ -61,16 +61,28 @@ describeCatchUpWithTheMarket = describe "catchUpWithTheMarket" do
     let minute = 60
         hour   = 60 * minute
 
-        Right (result, eventStore)
+        (result, logs)
           = runPricePreprocessorMonad @CatchUpWithTheMarketErrors initialEvents do
-              savedSwings <- Error.catchVoid (Eventful.getAggregate @SwingEvent swingsAggregateId)
+              void $ Error.catchVoid $ Eventful.applyCommand swingsAggregateId $ AddNewPrice TimedPrice
+                { time  = Time.UTCTime (Time.fromGregorian 2021 8 30) 0
+                , price = Coinbase.Price 48815.00
+                }
+
+              say "Hello?"
+
+              savedSwings <-
+                Error.catchVoid (Eventful.getAggregate @SwingEvent swingsAggregateId)
+
+              showAndSay savedSwings
+
               void $ catchUpWithTheMarket
                   (Coinbase.TradingPair Coinbase.BTC Coinbase.USD)
                   ( Time.UTCTime
                       (Time.fromGregorian 2021 9 12)
-                      (17 * hour + 55 * minute + 37))
+                      (17 * hour + 55 * minute + 37) )
                   savedSwings
-              Error.catchVoid (Eventful.getAggregate @SwingEvent swingsAggregateId)
+
+              Error.catchVoid $ Eventful.getAggregate @SwingEvent swingsAggregateId
 
         mkTime' day hours minutes
           = Time.UTCTime
@@ -95,9 +107,9 @@ describeCatchUpWithTheMarket = describe "catchUpWithTheMarket" do
           $ Just $ Low  (Coinbase.Price 25000.00) (mkTime' 3  0  0)
               Nothing
 
-    print eventStore
+    putStrLn $ unlines logs
 
-    result `shouldBe` expectedSwings
+    result `shouldBe` Right expectedSwings
 
 
 describeRoundToGranularity :: Spec

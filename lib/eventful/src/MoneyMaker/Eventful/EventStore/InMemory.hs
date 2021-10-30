@@ -13,10 +13,11 @@ import MoneyMaker.Eventful.Command
 import MoneyMaker.Eventful.Event
 import MoneyMaker.Eventful.EventStore.Interface
 
-import Protolude
+import Protolude hiding (StateT, runStateT)
 
-import qualified Data.Aeson as Aeson
-import qualified Data.UUID  as UUID
+import qualified Control.Monad.State.Strict as State
+import qualified Data.Aeson                 as Aeson
+import qualified Data.UUID                  as UUID
 
 
 data StorableEvent
@@ -24,7 +25,7 @@ data StorableEvent
       { id      :: !UUID.UUID
       , payload :: !Aeson.Value -- ^ JSON encoded event
       }
-  deriving stock (Show)
+  deriving stock (Eq, Show)
 
 toStorableEvent
   :: Eventful event
@@ -39,7 +40,7 @@ toStorableEvent aggregateId
 -- | Non-persisted in-memory event store for testing
 newtype InMemoryEventStoreT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
   = InMemoryEventStoreT
-      { getInMemoryEventStoreT :: StateT [StorableEvent] (UltraExceptT m errors) a }
+      { getInMemoryEventStoreT :: State.StateT [StorableEvent] (UltraExceptT m errors) a }
   deriving newtype (Functor, Applicative, Monad, MonadState [StorableEvent])
 
 runInMemoryEventStoreT
@@ -49,7 +50,7 @@ runInMemoryEventStoreT
   -> m (Either (OneOf errors) (a, [StorableEvent]))
 
 runInMemoryEventStoreT genesisEvents (InMemoryEventStoreT action)
-  = runUltraExceptT $ runStateT action genesisEvents
+  = runUltraExceptT $ State.runStateT action genesisEvents
 
 runInMemoryEventStoreTWithoutErrors
   :: Monad m
@@ -57,7 +58,7 @@ runInMemoryEventStoreTWithoutErrors
   -> InMemoryEventStoreT m '[] a
   -> m (a, [StorableEvent])
 runInMemoryEventStoreTWithoutErrors initialEvents (InMemoryEventStoreT action)
-  = runUltraExceptTWithoutErrors $ runStateT action initialEvents
+  = runUltraExceptTWithoutErrors $ State.runStateT action initialEvents
 
 instance Monad m => MonadUltraError (InMemoryEventStoreT m) where
   throwUltraError = InMemoryEventStoreT . lift . throwUltraError
@@ -74,11 +75,12 @@ instance Monad m => MonadUltraError (InMemoryEventStoreT m) where
         $ lift -- StateT [StorableEvent] (UltraExceptT m errors) (Either (OneOf (error:errors)) (a, [StorableEvent]))
         $ liftToUltraExceptT -- UltraExceptT m errors (Either (OneOf (error:errors)) (a, [StorableEvent]))
         $ runUltraExceptT -- m (Either (OneOf (error:errors)) (a, [StorableEvent]))
-        $ runStateT action currentState -- UltraExceptT m (error:errors) (a, [StorableEvent])
+        $ State.runStateT action currentState -- UltraExceptT m (error:errors) (a, [StorableEvent])
 
     case result of
-      Right (val, _) ->
-        InMemoryEventStoreT $ pure val
+      Right (val, eventStore) -> do
+        put eventStore
+        pure val
 
       Left err ->
         case getOneOf err of
@@ -90,7 +92,7 @@ instance Monad m => MonadUltraError (InMemoryEventStoreT m) where
 instance Monad m => MonadEventStore (InMemoryEventStoreT m) where
   type MonomorphicEvent (InMemoryEventStoreT m) = StorableEvent
 
-  dumpTheEventStore = get
+  dumpEventStore = get
 
   getAggregateWithProxy = getAggregateWithProxyInMemory
   applyCommandWithProxy = applyCommandWithProxyInMemory

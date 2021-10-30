@@ -112,7 +112,7 @@ instance Monad m => MonadUltraError (SqlEventStoreT m) where
 instance MonadIO m => MonadEventStore (SqlEventStoreT m) where
   type MonomorphicEvent (SqlEventStoreT m) = Event
 
-  dumpTheEventStore = do
+  dumpEventStore = do
     connectionPool <- ask
 
     liftIO $ flip Persist.runSqlPool connectionPool do

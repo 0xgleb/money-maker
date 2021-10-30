@@ -50,7 +50,7 @@ data CouldntDecodeEventError
 class MonadUltraError m => MonadEventStore (m :: [Type] -> Type -> Type) where
   type MonomorphicEvent m :: Type
 
-  dumpTheEventStore :: m errors [MonomorphicEvent m]
+  dumpEventStore :: m errors [MonomorphicEvent m]
 
   getAggregateWithProxy
     :: ( NoEventsFoundError `Elem` errors

@@ -1,6 +1,7 @@
-{-# LANGUAGE DeriveAnyClass  #-}
-{-# LANGUAGE OverloadedLists #-}
-{-# LANGUAGE StrictData      #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE OverloadedLists       #-}
+{-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE StrictData            #-}
 
 module MoneyMaker.PricePreprocessor
   ( ContractualPriceData
@@ -14,6 +15,8 @@ module MoneyMaker.PricePreprocessor
   , RestrictedGranularity(..)
 
   , module Swings
+
+  , MonadPrinter(..)
 
   -- Exports for testing:
   , catchUpWithTheMarket
@@ -39,8 +42,6 @@ import qualified Data.Generics.Product             as Generics
 import qualified Data.Time.Clock                   as Time
 import qualified Test.QuickCheck                   as QC
 import qualified Test.QuickCheck.Arbitrary.Generic as QC
-
-import qualified Debug.Trace as Debug
 
 -- Just a placeholder until Python actually sends some useful data
 data ContractualPrediction
@@ -74,6 +75,8 @@ toContractualPriceData
      , Eventful.CouldntDecodeEventError `Error.Elem` errors
      , NoNewCandlesFoundError `Error.Elem` errors
      , Coinbase.ServantClientError `Error.Elem` errors
+     , Show (Eventful.MonomorphicEvent m)
+     , MonadPrinter m
      )
   => Coinbase.TickerPriceData
   -> m errors ContractualPriceData
@@ -107,7 +110,17 @@ instance QC.Arbitrary NoNewCandlesFoundError where
   arbitrary = QC.genericArbitrary
   shrink    = QC.genericShrink
 
-class MonadPrinter (m :: [Type] -> Type -> Type) where
+class (forall errors. Monad (m errors)) => MonadPrinter (m :: [Type] -> Type -> Type) where
+  say :: Text -> m errors ()
+
+  showAndSay :: Show a => a -> m errors ()
+  showAndSay = say . show
+
+  showAndSayWithTitle :: Show a => Text -> a -> m errors ()
+  showAndSayWithTitle title value = do
+    say $ "\n" <> title
+    showAndSay value
+    say ""
 
 catchUpWithTheMarket
   :: ( Eventful.MonadEventStore m
@@ -116,6 +129,8 @@ catchUpWithTheMarket
      , Eventful.CouldntDecodeEventError `Error.Elem` errors
      , NoNewCandlesFoundError `Error.Elem` errors
      , Coinbase.ServantClientError `Error.Elem` errors
+     , MonadPrinter m
+     , Show (Eventful.MonomorphicEvent m)
      )
   => Coinbase.TradingPair
   -> Time.UTCTime
@@ -124,10 +139,13 @@ catchUpWithTheMarket
 
 catchUpWithTheMarket productId currentTime savedSwings = do
   let timeOfPreviousSave
-        = Debug.traceShowId $ getTime $ getLastPrice savedSwings
+        = getTime $ getLastPrice savedSwings
 
       granularity -- TODO: throw an error if the difference is negative
-        = Debug.traceShowId $ deriveGranularity $ Time.diffUTCTime currentTime timeOfPreviousSave
+        = deriveGranularity $ Time.diffUTCTime currentTime timeOfPreviousSave
+
+  showAndSay timeOfPreviousSave
+  showAndSay granularity
 
   -- TODO: you need to make sure you're not requesting more than 300 candles
   consolidatedCandles <-
@@ -143,35 +161,49 @@ catchUpWithTheMarket productId currentTime savedSwings = do
             savedSwings
             consolidatedCandles
 
-  newSwings <- case Debug.traceShowId swingCommands of
+  showAndSayWithTitle "swingCommands" swingCommands
+
+  newSwings <- case swingCommands of
     Left error ->
       Error.throwUltraError error
 
     Right (command :| commands) -> Error.catchVoid do
+      showAndSayWithTitle "event store" =<< Eventful.dumpEventStore
+
       swings <- Eventful.applyCommand swingsAggregateId command
 
-      foldM
-        (\_swings nextCommand -> Eventful.applyCommand swingsAggregateId nextCommand)
+      result <- foldM
+        (\_swings nextCommand -> do
+            showAndSayWithTitle "nextCommand" nextCommand
+            showAndSayWithTitle "event store" =<< Eventful.dumpEventStore
+            Eventful.applyCommand swingsAggregateId nextCommand
+        )
         swings
         commands
 
+      showAndSayWithTitle "event store" =<< Eventful.dumpEventStore
+
+      pure result
+
+  showAndSayWithTitle "event store" =<< Eventful.dumpEventStore
+
   case granularity of
-    OneMinute ->
+    OneMinute -> do
       -- The Coinbase API returns up to 300 candles per request. Because of
       -- deriveGranularity, if we needed more than 300 OneMinute candles
       -- we would request OneHour candles instead. So if the last request
       -- that we did was in minutes then we don't need to get more candles
-      pure $ Debug.traceShowId newSwings
+      showAndSayWithTitle "newSwings" newSwings
 
-    OneHour ->
-      uncurry2 catchUpWithTheMarket $ Debug.traceShowId (productId, currentTime, newSwings)
+      pure newSwings
 
-    OneDay ->
-      uncurry2 catchUpWithTheMarket $ Debug.traceShowId (productId, currentTime, newSwings)
+    OneHour -> do
+      showAndSay (productId, currentTime, newSwings)
+      catchUpWithTheMarket productId currentTime newSwings
 
-  where
-    uncurry2 f (a, b, c)
-      = f a b c
+    OneDay -> do
+      showAndSay (productId, currentTime, newSwings)
+      catchUpWithTheMarket productId currentTime newSwings
 
 
 data RestrictedGranularity

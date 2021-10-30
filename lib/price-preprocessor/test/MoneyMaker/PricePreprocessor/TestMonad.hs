@@ -7,20 +7,66 @@ module MoneyMaker.PricePreprocessor.TestMonad
   )
   where
 
+import MoneyMaker.PricePreprocessor
+
 import qualified MoneyMaker.Coinbase.SDK as Coinbase
 import qualified MoneyMaker.Error        as Error
 import qualified MoneyMaker.Eventful     as Eventful
 
 import Protolude
 
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.Time             as Time
+import qualified Data.ByteString.Char8   as BS
+import qualified Data.Time               as Time
 
+{-
+import qualified Control.Monad.Logger    as Logger
+import qualified Data.Pool               as Pool
+import qualified Database.Persist.Sql    as Persist
+import qualified Database.Persist.Sqlite as Sqlite
+import qualified System.IO.Unsafe        as Unsafe
 
 newtype PricePreprocessorTestMonad errors a
   = PricePreprocessorTestMonad
       { runPricePreprocessorTestMonad
-          :: Eventful.InMemoryEventStoreT Identity errors a
+          :: Eventful.SqlEventStoreT (StateT [Text] (Logger.NoLoggingT IO)) errors a
+      }
+  deriving newtype
+    ( Functor
+    , Applicative
+    , Monad
+    , MonadIO
+    , Error.MonadUltraError
+    , Eventful.MonadEventStore
+    )
+
+instance MonadPrinter PricePreprocessorTestMonad where
+  say text
+    = PricePreprocessorTestMonad
+    $ Eventful.SqlEventStoreT
+    $ lift
+    $ Error.liftToUltraExceptT
+    $ state $ ((),) . (<> [text])
+
+runPricePreprocessorMonad
+  :: forall errors a
+   . [Eventful.StorableEvent]
+  -> PricePreprocessorTestMonad errors a
+  -> (Either (Error.OneOf errors) a, [Text])
+
+runPricePreprocessorMonad _initialEvents procedure
+  = Unsafe.unsafePerformIO $ Logger.runNoLoggingT $ Sqlite.withSqlitePool ":memory:" 1 $ \connectionPool -> do
+      Pool.withResource connectionPool
+        $ runReaderT $ Persist.runMigration Eventful.migrateAll
+
+      flip runStateT [] $ Eventful.runSqlEventStoreT connectionPool
+        $ runPricePreprocessorTestMonad procedure
+
+-}
+
+newtype PricePreprocessorTestMonad errors a
+  = PricePreprocessorTestMonad
+      { runPricePreprocessorTestMonad
+          :: Eventful.InMemoryEventStoreT (State [Text]) errors a
       }
   deriving newtype
     ( Functor
@@ -30,14 +76,22 @@ newtype PricePreprocessorTestMonad errors a
     , Eventful.MonadEventStore
     )
 
+instance MonadPrinter PricePreprocessorTestMonad where
+  say text
+    = PricePreprocessorTestMonad
+    $ Eventful.InMemoryEventStoreT
+    $ lift
+    $ Error.liftToUltraExceptT
+    $ state $ ((),) . (<> [text])
+
 runPricePreprocessorMonad
   :: forall errors a
    . [Eventful.StorableEvent]
   -> PricePreprocessorTestMonad errors a
-  -> Either (Error.OneOf errors) (a, [Eventful.StorableEvent])
+  -> (Either (Error.OneOf errors) a, [Text])
 
 runPricePreprocessorMonad initialEvents procedure
-  = runIdentity
+  = first (fmap fst) $ flip runState []
   $ Eventful.runInMemoryEventStoreT initialEvents
   $ runPricePreprocessorTestMonad procedure
 

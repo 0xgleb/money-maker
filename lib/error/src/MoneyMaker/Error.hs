@@ -278,8 +278,8 @@ liftToUltraExceptT
 -- | This function allows unwrapping UltraExceptT without any errors
 -- if the error list is empty
 runUltraExceptTWithoutErrors :: Monad m => UltraExceptT m '[] a -> m a
-runUltraExceptTWithoutErrors UltraExceptT{..} = do
-  result <- runExceptT getUltraExceptT
+runUltraExceptTWithoutErrors action = do
+  result <- runUltraExceptT action
   case result of
     Right rightResult ->
       pure rightResult
