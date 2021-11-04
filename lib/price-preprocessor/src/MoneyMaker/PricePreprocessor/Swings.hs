@@ -21,6 +21,7 @@ import qualified MoneyMaker.Eventful     as Eventful
 
 import Protolude
 
+import qualified Prelude
 import qualified Data.Aeson                        as Aeson
 import qualified Data.Generics.Product             as Generics
 import qualified Data.Time.Clock                   as Time
@@ -31,12 +32,17 @@ import qualified Test.QuickCheck.Arbitrary.Generic as QC
 data Swings
   = SwingUp High
   | SwingDown Low
-  deriving stock (Eq, Show, Generic)
+  deriving stock (Eq, Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
 instance QC.Arbitrary Swings where
   arbitrary = QC.genericArbitrary
   shrink    = QC.genericShrink
+
+instance Prelude.Show Swings where
+  show = ("\n" <>) . \case
+    SwingUp high  -> show high
+    SwingDown low -> show low
 
 data High
   = High
@@ -44,12 +50,21 @@ data High
       , time        :: Time.UTCTime
       , previousLow :: Maybe Low
       }
-  deriving stock (Eq, Show, Generic)
+  deriving stock (Eq, Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
 
 instance QC.Arbitrary High where
   arbitrary = QC.genericArbitrary
   shrink    = QC.genericShrink
+
+instance Prelude.Show High where
+  show High{..}
+    = "HIGH: "
+    <> show price
+    <> " at "
+    <> show time
+    <> "\n"
+    <> fromMaybe "" (show <$> previousLow)
 
 data Low
   = Low
@@ -57,8 +72,17 @@ data Low
       , time         :: Time.UTCTime
       , previousHigh :: Maybe High
       }
-  deriving stock (Eq, Show, Generic)
+  deriving stock (Eq, Generic)
   deriving anyclass (Aeson.ToJSON, Aeson.FromJSON)
+
+instance Prelude.Show Low where
+  show Low{..}
+    = "LOW:  "
+    <> show price
+    <> " at "
+    <> show time
+    <> "\n"
+    <> fromMaybe "" (show <$> previousHigh)
 
 instance QC.Arbitrary Low where
   arbitrary = QC.genericArbitrary

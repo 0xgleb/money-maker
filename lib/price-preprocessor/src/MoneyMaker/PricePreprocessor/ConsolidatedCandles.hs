@@ -35,7 +35,7 @@ data ConsolidatedExtremums
 
 consolidateCandles :: [Coinbase.Candle] -> ConsolidatedCandles
 consolidateCandles (sortOn getTime -> orderedCandles)
-  = case foldl consolidateACandle NoCandles orderedCandles of
+  = case foldl consolidateCandle NoCandles orderedCandles of
       consolidated@(ConsolidatedCandles _ (ConsolidatedExtremums{..} :| _)) ->
         let isLater Coinbase.Candle{time}
               =  time > getTime consolidatedLow
@@ -56,7 +56,7 @@ consolidateCandles (sortOn getTime -> orderedCandles)
       consolidated -> consolidated
 
   where
-    consolidateACandle consolidatedCandle nextCandle
+    consolidateCandle consolidatedCandle nextCandle
       = case consolidatedCandle of
           NoCandles ->
             OneCandle nextCandle

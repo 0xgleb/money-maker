@@ -68,12 +68,8 @@ describeCatchUpWithTheMarket = describe "catchUpWithTheMarket" do
                 , price = Coinbase.Price 48815.00
                 }
 
-              say "Hello?"
-
               savedSwings <-
                 Error.catchVoid (Eventful.getAggregate @SwingEvent swingsAggregateId)
-
-              showAndSay savedSwings
 
               void $ catchUpWithTheMarket
                   (Coinbase.TradingPair Coinbase.BTC Coinbase.USD)
@@ -95,9 +91,7 @@ describeCatchUpWithTheMarket = describe "catchUpWithTheMarket" do
                  $ Low  (Coinbase.Price 45913.97) (mkTime' 12 17 55)
           $ Just $ High (Coinbase.Price 46021.38) (mkTime' 12 17 54)
           $ Just $ Low  (Coinbase.Price 45873.98) (mkTime' 12 17 53)
-          $ Just $ High (Coinbase.Price 46071.38) (mkTime' 12 17 5)
-          $ Just $ Low  (Coinbase.Price 45854.80) (mkTime' 12 17 3)
-          $ Just $ High (Coinbase.Price 46071.38) (mkTime' 12 17 2)
+          $ Just $ High (Coinbase.Price 46071.38) (mkTime' 12 17 4)
           $ Just $ Low  (Coinbase.Price 45854.73) (mkTime' 12 17 2)
           $ Just $ High (Coinbase.Price 46095.17) (mkTime' 12 16 0)
           $ Just $ Low  (Coinbase.Price 45792.61) (mkTime' 12 15 0)

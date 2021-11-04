@@ -9,6 +9,7 @@ import Environment
 import qualified MoneyMaker.Coinbase.SDK      as Coinbase
 import qualified MoneyMaker.Error             as Error
 import qualified MoneyMaker.Eventful          as Eventful
+import           MoneyMaker.MonadPrinter
 import qualified MoneyMaker.PricePreprocessor as Preprocessor
 
 import Protolude
@@ -122,6 +123,7 @@ processPriceData
   :: ( forall errors. MonadIO (m errors)
      , Eventful.MonadEventStore m
      , Coinbase.CoinbaseRestAPI m
+     , MonadPrinter m
      )
   => STM.TQueue Preprocessor.ContractualPriceData
   -> Coinbase.TickerPriceData

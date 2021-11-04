@@ -1,7 +1,6 @@
-{-# LANGUAGE DeriveAnyClass        #-}
-{-# LANGUAGE OverloadedLists       #-}
-{-# LANGUAGE QuantifiedConstraints #-}
-{-# LANGUAGE StrictData            #-}
+{-# LANGUAGE DeriveAnyClass  #-}
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE StrictData      #-}
 
 module MoneyMaker.PricePreprocessor
   ( ContractualPriceData
@@ -15,8 +14,6 @@ module MoneyMaker.PricePreprocessor
   , RestrictedGranularity(..)
 
   , module Swings
-
-  , MonadPrinter(..)
 
   -- Exports for testing:
   , catchUpWithTheMarket
@@ -34,6 +31,7 @@ import MoneyMaker.PricePreprocessor.Swings              as Swings
 import qualified MoneyMaker.Coinbase.SDK as Coinbase
 import qualified MoneyMaker.Error        as Error
 import qualified MoneyMaker.Eventful     as Eventful
+import           MoneyMaker.MonadPrinter
 
 import Protolude
 
@@ -75,7 +73,6 @@ toContractualPriceData
      , Eventful.CouldntDecodeEventError `Error.Elem` errors
      , NoNewCandlesFoundError `Error.Elem` errors
      , Coinbase.ServantClientError `Error.Elem` errors
-     , Show (Eventful.MonomorphicEvent m)
      , MonadPrinter m
      )
   => Coinbase.TickerPriceData
@@ -110,18 +107,6 @@ instance QC.Arbitrary NoNewCandlesFoundError where
   arbitrary = QC.genericArbitrary
   shrink    = QC.genericShrink
 
-class (forall errors. Monad (m errors)) => MonadPrinter (m :: [Type] -> Type -> Type) where
-  say :: Text -> m errors ()
-
-  showAndSay :: Show a => a -> m errors ()
-  showAndSay = say . show
-
-  showAndSayWithTitle :: Show a => Text -> a -> m errors ()
-  showAndSayWithTitle title value = do
-    say $ "\n" <> title
-    showAndSay value
-    say ""
-
 catchUpWithTheMarket
   :: ( Eventful.MonadEventStore m
      , Coinbase.CoinbaseRestAPI m
@@ -130,7 +115,6 @@ catchUpWithTheMarket
      , NoNewCandlesFoundError `Error.Elem` errors
      , Coinbase.ServantClientError `Error.Elem` errors
      , MonadPrinter m
-     , Show (Eventful.MonomorphicEvent m)
      )
   => Coinbase.TradingPair
   -> Time.UTCTime
@@ -143,9 +127,6 @@ catchUpWithTheMarket productId currentTime savedSwings = do
 
       granularity -- TODO: throw an error if the difference is negative
         = deriveGranularity $ Time.diffUTCTime currentTime timeOfPreviousSave
-
-  showAndSay timeOfPreviousSave
-  showAndSay granularity
 
   -- TODO: you need to make sure you're not requesting more than 300 candles
   consolidatedCandles <-
@@ -161,48 +142,29 @@ catchUpWithTheMarket productId currentTime savedSwings = do
             savedSwings
             consolidatedCandles
 
-  showAndSayWithTitle "swingCommands" swingCommands
-
   newSwings <- case swingCommands of
     Left error ->
       Error.throwUltraError error
 
     Right (command :| commands) -> Error.catchVoid do
-      showAndSayWithTitle "event store" =<< Eventful.dumpEventStore
-
       swings <- Eventful.applyCommand swingsAggregateId command
 
-      result <- foldM
-        (\_swings nextCommand -> do
-            showAndSayWithTitle "nextCommand" nextCommand
-            showAndSayWithTitle "event store" =<< Eventful.dumpEventStore
-            Eventful.applyCommand swingsAggregateId nextCommand
-        )
+      foldM (const $ Eventful.applyCommand swingsAggregateId)
         swings
         commands
 
-      showAndSayWithTitle "event store" =<< Eventful.dumpEventStore
-
-      pure result
-
-  showAndSayWithTitle "event store" =<< Eventful.dumpEventStore
-
   case granularity of
-    OneMinute -> do
+    OneMinute ->
       -- The Coinbase API returns up to 300 candles per request. Because of
       -- deriveGranularity, if we needed more than 300 OneMinute candles
       -- we would request OneHour candles instead. So if the last request
       -- that we did was in minutes then we don't need to get more candles
-      showAndSayWithTitle "newSwings" newSwings
-
       pure newSwings
 
-    OneHour -> do
-      showAndSay (productId, currentTime, newSwings)
+    OneHour ->
       catchUpWithTheMarket productId currentTime newSwings
 
-    OneDay -> do
-      showAndSay (productId, currentTime, newSwings)
+    OneDay ->
       catchUpWithTheMarket productId currentTime newSwings
 
 
@@ -297,10 +259,6 @@ generateSwingCommands error savedSwings = \case
 
           else
             let (earlierExtremum, laterExtremum) =
-                  -- TODO: if consolidatedLow and consolidatedHigh were reached in the
-                  -- same candle then we arbitrarily decide that the low came earlier.
-                  -- A better approach would be to use the single candle resolution
-                  -- mechanism to deal with this
                   if getTime consolidatedLow < getTime consolidatedHigh
                   then (consolidatedLow, consolidatedHigh)
                   else (consolidatedHigh, consolidatedLow)

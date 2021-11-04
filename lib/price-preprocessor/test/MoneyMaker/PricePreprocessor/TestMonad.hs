@@ -7,16 +7,15 @@ module MoneyMaker.PricePreprocessor.TestMonad
   )
   where
 
-import MoneyMaker.PricePreprocessor
-
 import qualified MoneyMaker.Coinbase.SDK as Coinbase
 import qualified MoneyMaker.Error        as Error
 import qualified MoneyMaker.Eventful     as Eventful
+import           MoneyMaker.MonadPrinter
 
 import Protolude
 
-import qualified Data.ByteString.Char8   as BS
-import qualified Data.Time               as Time
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.Time             as Time
 
 {-
 import qualified Control.Monad.Logger    as Logger
@@ -76,7 +75,7 @@ newtype PricePreprocessorTestMonad errors a
     , Eventful.MonadEventStore
     )
 
-instance MonadPrinter PricePreprocessorTestMonad where
+instance {-# OVERLAPPING #-} MonadPrinter PricePreprocessorTestMonad where
   say text
     = PricePreprocessorTestMonad
     $ Eventful.InMemoryEventStoreT
