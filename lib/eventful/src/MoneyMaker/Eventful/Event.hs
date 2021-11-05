@@ -20,6 +20,7 @@ import qualified Data.UUID  as UUID
 -- with type-level values of any "kind", for example, type-level strings
 newtype Id (tag :: Symbol)
   = Id { getId :: UUID.UUID }
+  deriving newtype (Show)
 
 class
   ( Aeson.ToJSON event
@@ -27,7 +28,7 @@ class
   , KnownSymbol (EventName event)
   ) => Eventful event
   where
-    type family EventName      event :: Symbol
+    type family EventName      event = (name :: Symbol) | name -> event
     type family EventAggregate event :: Type
     type family EventError     event :: Type
 

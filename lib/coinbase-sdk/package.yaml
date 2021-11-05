@@ -7,16 +7,17 @@ dependencies:
 - base
 - QuickCheck
 - aeson
+- bytestring
 - generic-arbitrary
 - http-client
 - http-client-tls
 - protolude
+- quickcheck-instances
 - servant
 - servant-client
 - stm
 - text
 - time
-- timestamp
 - vector
 - websockets
 

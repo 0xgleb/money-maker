@@ -3,19 +3,15 @@ module MoneyMaker.Eventful.Command
   )
   where
 
-import MoneyMaker.Error
 import MoneyMaker.Eventful.Event
 
 import Protolude
 
 class Eventful event => Command command event | command -> event where
-  type family CommandErrors command :: [Type]
+  type family CommandError command :: Type
 
   handleCommand
-    :: ( MonadUltraError m
-       , CommandErrors command `Elems` errors
-       )
-    => Id (EventName event)
+    :: Id (EventName event) -- event ID so that it can be used in errors
     -> Maybe (EventAggregate event)
     -> command
-    -> m errors (NonEmpty event)
+    -> Either (CommandError command) (NonEmpty event)

@@ -32,6 +32,7 @@ websocketsClient writeNewPriceDataToQueue conn = do
   WS.sendTextData conn $ Aeson.encode subscribeMessage
 
   void $ forever $ do
+    -- TODO: check for connection errors
     msg <- WS.receiveData conn
     liftIO $ case Aeson.decode @CoinbaseMessage msg of
       Nothing ->

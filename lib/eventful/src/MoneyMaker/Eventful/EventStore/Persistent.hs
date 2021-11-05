@@ -110,6 +110,14 @@ instance Monad m => MonadUltraError (SqlEventStoreT m) where
 
 
 instance MonadIO m => MonadEventStore (SqlEventStoreT m) where
+  type MonomorphicEvent (SqlEventStoreT m) = Event
+
+  dumpEventStore = do
+    connectionPool <- ask
+
+    liftIO $ flip Persist.runSqlPool connectionPool do
+      fmap Persist.entityVal <$> Persist.selectList [] []
+
   getAggregateWithProxy = getAggregateWithSql
   applyCommandWithProxy = applyCommandWithSql
 
@@ -147,7 +155,7 @@ applyCommandWithSql
   :: forall command event errors m
    . ( Command command event
      , CouldntDecodeEventError `Elem` errors
-     , CommandErrors command `Elems` errors
+     , CommandError command `Elem` errors
      , EventError event `Elem` errors
      , Eventful event
      , MonadIO m
@@ -166,7 +174,9 @@ applyCommandWithSql eventProxy aggregateId command = do
 
   -- Use the command's handleCommand method to get what events should be added
   (headEvent :| tailEvents) <-
-    handleCommand aggregateId maybeAggregate command
+    handleCommand aggregateId maybeAggregate command & \case
+      Right events -> pure events
+      Left error   -> throwUltraError error
 
   let allEvents = headEvent : tailEvents
 

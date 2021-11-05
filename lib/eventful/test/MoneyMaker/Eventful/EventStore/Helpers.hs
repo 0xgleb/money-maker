@@ -1,6 +1,7 @@
 module MoneyMaker.Eventful.EventStore.Helpers
   ( TestEventStoreProcedureErrors
   , testEventStoreProcedure
+  , userAggregateId
   )
   where
 
@@ -15,8 +16,11 @@ type TestEventStoreProcedureErrors
   = [ UserEventError
     , CouldntDecodeEventError
     , NoEventsFoundError
+    , CommandError UserCommand
     ]
-    ++ CommandErrors UserCommand
+
+userAggregateId :: Id "user"
+userAggregateId = Id @"user" [uuid|123e4666-e89b-12d3-a456-666614174000|]
 
 testEventStoreProcedure
   :: forall errors m
@@ -26,12 +30,17 @@ testEventStoreProcedure
   => m errors User
 
 testEventStoreProcedure = do
-  let userId = Id @"user" [uuid|123e4666-e89b-12d3-a456-666614174000|]
+  void $ applyCommand userAggregateId CreateUser
+  void $ applyCommand userAggregateId $ SetName "Creator"
+  void $ applyCommand userAggregateId $ SetRole Genius
 
-  void $ applyCommand userId CreateUser
-  void $ applyCommand userId $ SetName "Creator"
-  void $ applyCommand userId $ SetRole Genius
-  void $ applyCommand userId $ SetName "Gleb"
-  void $ applyCommand userId $ SetRole Engineer
+  catchUltraError throwAnError $ const $ pure ()
 
-  getAggregate @UserEvent userId
+  void $ applyCommand userAggregateId $ SetName "Gleb"
+  void $ applyCommand userAggregateId $ SetRole Engineer
+
+  getAggregate @UserEvent userAggregateId
+
+  where
+    throwAnError :: m (() : errors) ()
+    throwAnError = throwUltraError ()

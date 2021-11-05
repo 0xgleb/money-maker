@@ -3,6 +3,7 @@ module MoneyMaker.Eventful.EventStore.InMemory
   , runInMemoryEventStoreT
   , runInMemoryEventStoreTWithoutErrors
 
+  , toStorableEvent
   , StorableEvent(..)
   )
   where
@@ -23,7 +24,18 @@ data StorableEvent
       { id      :: !UUID.UUID
       , payload :: !Aeson.Value -- ^ JSON encoded event
       }
+  deriving stock (Eq, Show)
 
+toStorableEvent
+  :: Eventful event
+  => Id (EventName event)
+  -> event
+  -> StorableEvent
+toStorableEvent aggregateId
+  = StorableEvent (getId aggregateId) . Aeson.toJSON
+
+-- TODO: refactor so that it takes m :: [Type] -> Type -> Type instead of using
+-- UltraExceptT. This way it will be more composable
 -- | Non-persisted in-memory event store for testing
 newtype InMemoryEventStoreT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
   = InMemoryEventStoreT
@@ -65,8 +77,9 @@ instance Monad m => MonadUltraError (InMemoryEventStoreT m) where
         $ runStateT action currentState -- UltraExceptT m (error:errors) (a, [StorableEvent])
 
     case result of
-      Right (val, _) ->
-        InMemoryEventStoreT $ pure val
+      Right (val, eventStore) -> do
+        put eventStore
+        pure val
 
       Left err ->
         case getOneOf err of
@@ -76,6 +89,10 @@ instance Monad m => MonadUltraError (InMemoryEventStoreT m) where
 
 
 instance Monad m => MonadEventStore (InMemoryEventStoreT m) where
+  type MonomorphicEvent (InMemoryEventStoreT m) = StorableEvent
+
+  dumpEventStore = get
+
   getAggregateWithProxy = getAggregateWithProxyInMemory
   applyCommandWithProxy = applyCommandWithProxyInMemory
 
@@ -109,7 +126,7 @@ applyCommandWithProxyInMemory
   :: forall command event errors m
    . ( Command command event
      , CouldntDecodeEventError `Elem` errors
-     , CommandErrors command `Elems` errors
+     , CommandError command `Elem` errors
      , EventError event `Elem` errors
      , Eventful event
      , Monad m
@@ -127,10 +144,12 @@ applyCommandWithProxyInMemory eventProxy aggregateId command = do
       (const $ pure Nothing)
 
   -- Use the command's handleCommand method to get what events should be added
-  (headEvent :| tailEvents) <-
-    handleCommand aggregateId maybeAggregate command
+  headEvent :| tailEvents <-
+    handleCommand aggregateId maybeAggregate command & \case
+      Right events -> pure events
+      Left error   -> throwUltraError error
 
-  let allEvents = headEvent : tailEvents
+  let allNewEvents = headEvent : tailEvents
 
   -- Get a non-maybe aggregate
   nextAggregate <-
@@ -145,7 +164,7 @@ applyCommandWithProxyInMemory eventProxy aggregateId command = do
 
   -- Prepare to store the new events in the right format
   let newStorableEvents :: [StorableEvent]
-        = StorableEvent (getId aggregateId) . Aeson.toJSON <$> allEvents
+        = toStorableEvent aggregateId <$> allNewEvents
 
   -- Update the state with the new events and return the new aggregate
   state $ (aggregate,) . (<> newStorableEvents)
