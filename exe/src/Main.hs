@@ -141,6 +141,7 @@ spawnPredictionProcessAndBindToQueues = do
   priceDataQueue <- STM.newTQueueIO
   predictionsQueue <- STM.newTQueueIO
 
+  -- TODO: remove the Python integration. we don't really need it at the moment. save this file for later though
   (inputHandle, outputHandle, processHandle) <- createProcess "example"
   -- TODO: try pinging the process before spawning everything else
 
