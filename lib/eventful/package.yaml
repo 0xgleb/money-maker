@@ -6,7 +6,6 @@ dependencies:
 - base
 - aeson
 - bytestring
-- mtl
 - persistent
 - protolude
 - template-haskell

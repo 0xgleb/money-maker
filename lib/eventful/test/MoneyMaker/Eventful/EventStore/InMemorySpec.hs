@@ -1,7 +1,7 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE QuasiQuotes           #-}
 
-{-# OPTIONS_GHC -Wwarn=partial-type-signatures #-}
+{-# OPTIONS_GHC -Wno-error=partial-type-signatures #-}
 
 module MoneyMaker.Eventful.EventStore.InMemorySpec
   ( spec
@@ -28,8 +28,6 @@ spec = do
                 firstAggregate <- testEventStoreProcedure
 
                 eventStoreBefore <- dumpEventStore
-
-                catchUltraError (throwUltraError ()) (\() -> pure ())
 
                 eventStoreAfter <- dumpEventStore
 

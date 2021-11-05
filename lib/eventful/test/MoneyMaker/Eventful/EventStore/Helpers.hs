@@ -33,7 +33,14 @@ testEventStoreProcedure = do
   void $ applyCommand userAggregateId CreateUser
   void $ applyCommand userAggregateId $ SetName "Creator"
   void $ applyCommand userAggregateId $ SetRole Genius
+
+  catchUltraError throwAnError $ const $ pure ()
+
   void $ applyCommand userAggregateId $ SetName "Gleb"
   void $ applyCommand userAggregateId $ SetRole Engineer
 
   getAggregate @UserEvent userAggregateId
+
+  where
+    throwAnError :: m (() : errors) ()
+    throwAnError = throwUltraError ()

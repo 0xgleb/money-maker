@@ -13,11 +13,10 @@ import MoneyMaker.Eventful.Command
 import MoneyMaker.Eventful.Event
 import MoneyMaker.Eventful.EventStore.Interface
 
-import Protolude hiding (StateT, runStateT)
+import Protolude
 
-import qualified Control.Monad.State.Strict as State
-import qualified Data.Aeson                 as Aeson
-import qualified Data.UUID                  as UUID
+import qualified Data.Aeson as Aeson
+import qualified Data.UUID  as UUID
 
 
 data StorableEvent
@@ -40,7 +39,7 @@ toStorableEvent aggregateId
 -- | Non-persisted in-memory event store for testing
 newtype InMemoryEventStoreT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
   = InMemoryEventStoreT
-      { getInMemoryEventStoreT :: State.StateT [StorableEvent] (UltraExceptT m errors) a }
+      { getInMemoryEventStoreT :: StateT [StorableEvent] (UltraExceptT m errors) a }
   deriving newtype (Functor, Applicative, Monad, MonadState [StorableEvent])
 
 runInMemoryEventStoreT
@@ -50,7 +49,7 @@ runInMemoryEventStoreT
   -> m (Either (OneOf errors) (a, [StorableEvent]))
 
 runInMemoryEventStoreT genesisEvents (InMemoryEventStoreT action)
-  = runUltraExceptT $ State.runStateT action genesisEvents
+  = runUltraExceptT $ runStateT action genesisEvents
 
 runInMemoryEventStoreTWithoutErrors
   :: Monad m
@@ -58,7 +57,7 @@ runInMemoryEventStoreTWithoutErrors
   -> InMemoryEventStoreT m '[] a
   -> m (a, [StorableEvent])
 runInMemoryEventStoreTWithoutErrors initialEvents (InMemoryEventStoreT action)
-  = runUltraExceptTWithoutErrors $ State.runStateT action initialEvents
+  = runUltraExceptTWithoutErrors $ runStateT action initialEvents
 
 instance Monad m => MonadUltraError (InMemoryEventStoreT m) where
   throwUltraError = InMemoryEventStoreT . lift . throwUltraError
@@ -75,7 +74,7 @@ instance Monad m => MonadUltraError (InMemoryEventStoreT m) where
         $ lift -- StateT [StorableEvent] (UltraExceptT m errors) (Either (OneOf (error:errors)) (a, [StorableEvent]))
         $ liftToUltraExceptT -- UltraExceptT m errors (Either (OneOf (error:errors)) (a, [StorableEvent]))
         $ runUltraExceptT -- m (Either (OneOf (error:errors)) (a, [StorableEvent]))
-        $ State.runStateT action currentState -- UltraExceptT m (error:errors) (a, [StorableEvent])
+        $ runStateT action currentState -- UltraExceptT m (error:errors) (a, [StorableEvent])
 
     case result of
       Right (val, eventStore) -> do

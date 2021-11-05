@@ -17,6 +17,7 @@ import qualified MoneyMaker.Coinbase.SDK as Coinbase
 import Protolude
 
 import qualified Data.List.NonEmpty as NE
+import qualified Prelude
 import qualified Protolude.Partial  as Partial
 import qualified Test.QuickCheck    as QC
 
@@ -24,7 +25,21 @@ data ConsolidatedCandles
   = NoCandles
   | OneCandle Coinbase.Candle
   | ConsolidatedCandles (Maybe Coinbase.Candle) (NonEmpty ConsolidatedExtremums)
-  deriving stock (Show, Eq)
+  deriving stock (Eq)
+
+instance Prelude.Show ConsolidatedCandles where
+  show = \case
+    NoCandles ->
+      "No candles"
+
+    OneCandle candle ->
+      "One candle: " <> show candle
+
+    ConsolidatedCandles lastCandle (extremum :| extremums)->
+      "Unprocessed candle: " <> show lastCandle <> "\n"
+        <> foldl (\accumulated next -> accumulated <> "\n" <> show next)
+             (show extremum)
+             extremums
 
 data ConsolidatedExtremums
   = ConsolidatedExtremums

@@ -88,4 +88,4 @@ executables:
     - stm
     - text
     - wuss
-    - time # TODO: REMOVE
+    - time

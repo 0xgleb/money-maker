@@ -41,14 +41,11 @@ import qualified Data.Time.Clock                   as Time
 import qualified Test.QuickCheck                   as QC
 import qualified Test.QuickCheck.Arbitrary.Generic as QC
 
--- Just a placeholder until Python actually sends some useful data
 data ContractualPrediction
   = ContractualPrediction
       { message :: LText
       }
 
--- I think using "Contractual" prefix can help identify which types have to have
--- a certain encoding to not break the contract with the prediction mechanism
 data ContractualPriceData
   = ContractualPriceData
       { productId :: Coinbase.TradingPair
