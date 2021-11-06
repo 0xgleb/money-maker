@@ -16,12 +16,16 @@ import Protolude
 
 import qualified Control.Concurrent.STM      as STM
 import qualified Control.Monad.Logger        as Logger
+import qualified Data.Aeson                  as Aeson
 import qualified Data.Pool                   as Pool
+import qualified Data.Text.Lazy.IO           as Txt.LIO
 import qualified Data.Time                   as Time
 import qualified Database.Persist.Postgresql as Postgres
 import qualified Database.Persist.Sql        as Persist
+import qualified Paths_exe                   as Path
 import qualified Prelude
 import qualified System.IO                   as IO
+import qualified System.Process              as Proc
 import qualified Wuss
 
 deriving newtype instance Eventful.MonadEventStore m
@@ -66,21 +70,22 @@ main = do
           void $ forkIO $ getLivePriceData connectionPool mode priceDataQueue
 
           void $ forever $ do
-            executionOrders <- STM.atomically $ STM.readTQueue predictionQueue
-            executeNewOrders executionOrders
+            prediction <- STM.atomically $ STM.readTQueue predictionQueue
+            handlePrediction prediction
 
   where
+
     -- placeholder for the function that will take a new prediction from the
     -- prediction process and evaluate whether it needs to make any changes
     -- to the portfolio based on that
-    executeNewOrders Preprocessor.ExecutionOrders{..} = do
+    handlePrediction Preprocessor.ContractualPrediction{..} = do
       putStrLn message
 
 
 getLivePriceData
   :: Postgres.ConnectionPool
   -> Mode
-  -> STM.TQueue Preprocessor.PriceData
+  -> STM.TQueue Preprocessor.ContractualPriceData
   -> IO ()
 getLivePriceData connectionPool mode priceDataQueue = do
   let websocketHost = case mode of
@@ -120,7 +125,7 @@ processPriceData
      , Coinbase.CoinbaseRestAPI m
      , MonadPrinter m
      )
-  => STM.TQueue Preprocessor.PriceData
+  => STM.TQueue Preprocessor.ContractualPriceData
   -> Coinbase.TickerPriceData
   -> m ProcessPriceDataErrors ()
 
@@ -130,32 +135,77 @@ processPriceData priceDataQueue newPriceData = do
 
   liftIO $ STM.atomically $ STM.writeTQueue priceDataQueue priceData
 
-
 spawnPredictionProcessAndBindToQueues
-  :: IO
-       ( STM.TQueue Preprocessor.PriceData
-       , STM.TQueue Preprocessor.ExecutionOrders
-       )
+  :: IO (STM.TQueue Preprocessor.ContractualPriceData, STM.TQueue Preprocessor.ContractualPrediction)
 spawnPredictionProcessAndBindToQueues = do
   priceDataQueue <- STM.newTQueueIO
   predictionsQueue <- STM.newTQueueIO
 
+  -- TODO: remove the Python integration. we don't really need it at the moment. save this file for later though
+  (inputHandle, outputHandle, processHandle) <- createProcess "example"
+  -- TODO: try pinging the process before spawning everything else
+
+  -- need a separate thread to run the infinite loop
+  void $ forkIO $ do
+    bindPriceDataQueueToProcessInput priceDataQueue inputHandle
+    void $ Proc.terminateProcess processHandle
+
   -- need a separate thread to run the infinite loop
   void $ forkIO
-    $ bindMarketReaderToFundsManager priceDataQueue predictionsQueue
+    $ bindProcessOutputToPredictionsQueue outputHandle predictionsQueue
 
   pure (priceDataQueue, predictionsQueue)
 
+  where
+    createProcess strategy = do
+      scriptPath <- Path.getDataFileName $ "../soothsayer/" <> strategy <> ".py"
 
-bindMarketReaderToFundsManager
-  :: STM.TQueue Preprocessor.PriceData
-  -> STM.TQueue Preprocessor.ExecutionOrders
+      (Just inputHandle, Just outputHandle, _, processHandle) <-
+        Proc.createProcess (Proc.proc "/usr/bin/python3" [scriptPath])
+          { Proc.std_in = Proc.CreatePipe, Proc.std_out = Proc.CreatePipe }
+
+      IO.hSetBuffering inputHandle  IO.NoBuffering
+      IO.hSetBuffering outputHandle IO.NoBuffering
+
+      pure (InputHandle inputHandle, OutputHandle outputHandle, processHandle)
+
+newtype InputHandle
+  = InputHandle { unpackInputHandle :: Handle }
+  deriving newtype (Show)
+
+-- | This function reads from the queue whenever there is something in there
+-- and writes the new data into the input handle of the predictions process.
+-- The reason it only reads from the queue whenver there is something in there
+-- and doesn't just continuously run in an infinite loop is the @atomically@
+-- function, which blocks execution until there is something in the queue
+bindPriceDataQueueToProcessInput
+  :: STM.TQueue Preprocessor.ContractualPriceData
+  -> InputHandle
   -> IO ()
-bindMarketReaderToFundsManager marketQueue managerQueue = do
-  _contractualPriceData <- STM.atomically $ STM.readTQueue marketQueue
+bindPriceDataQueueToProcessInput priceDataQueue inputHandle = do
+  contractualPriceData <- STM.atomically $ STM.readTQueue priceDataQueue
 
-  STM.atomically $ STM.writeTQueue managerQueue Preprocessor.ExecutionOrders
-    { message = "Hello"
-    }
+  hPutStrLn (unpackInputHandle inputHandle) $ Aeson.encode contractualPriceData
 
-  bindMarketReaderToFundsManager marketQueue managerQueue
+  bindPriceDataQueueToProcessInput priceDataQueue inputHandle
+
+newtype OutputHandle
+  = OutputHandle { unpackOutputHandle :: Handle }
+  deriving newtype (Show)
+
+-- | This function reads from the prediction process output and writes new
+-- predictions into the prediction queue whenever there is a new line with a
+-- prediction in the output
+bindProcessOutputToPredictionsQueue
+  :: OutputHandle
+  -> STM.TQueue Preprocessor.ContractualPrediction
+  -> IO ()
+bindProcessOutputToPredictionsQueue
+  outputHandle@(OutputHandle unpackedOutputHandle)
+  predictionsQueue
+  = do
+  closed <- IO.hIsClosed unpackedOutputHandle
+  unless closed $ do
+    message <- Txt.LIO.hGetLine unpackedOutputHandle
+    STM.atomically $ STM.writeTQueue predictionsQueue Preprocessor.ContractualPrediction{..}
+    bindProcessOutputToPredictionsQueue outputHandle predictionsQueue

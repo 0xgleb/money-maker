@@ -3,12 +3,12 @@
 {-# LANGUAGE StrictData      #-}
 
 module MoneyMaker.PricePreprocessor
-  ( ContractualPriceData
+  ( PriceData
   , toContractualPriceData
 
   , swingsAggregateId
 
-  , ContractualPrediction(..)
+  , ExecutionOrders(..)
 
   , NoNewCandlesFoundError(..)
   , RestrictedGranularity(..)
@@ -41,13 +41,13 @@ import qualified Data.Time.Clock                   as Time
 import qualified Test.QuickCheck                   as QC
 import qualified Test.QuickCheck.Arbitrary.Generic as QC
 
-data ContractualPrediction
-  = ContractualPrediction
+data ExecutionOrders
+  = ExecutionOrders
       { message :: LText
       }
 
-data ContractualPriceData
-  = ContractualPriceData
+data PriceData
+  = PriceData
       { productId :: Coinbase.TradingPair
       , swings    :: Swings
       , price     :: Coinbase.Price
@@ -73,7 +73,7 @@ toContractualPriceData
      , MonadPrinter m
      )
   => Coinbase.TickerPriceData
-  -> m errors ContractualPriceData
+  -> m errors PriceData
 
 toContractualPriceData Coinbase.TickerPriceData{ time = currentTime, ..} = do
   savedSwings <-
@@ -90,7 +90,7 @@ toContractualPriceData Coinbase.TickerPriceData{ time = currentTime, ..} = do
     then pure savedSwings
     else catchUpWithTheMarket productId currentTime savedSwings
 
-  pure ContractualPriceData{ time = currentTime, ..}
+  pure PriceData{ time = currentTime, ..}
 
 
 data NoNewCandlesFoundError

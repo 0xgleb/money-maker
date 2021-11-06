@@ -58,7 +58,6 @@ ghc-options:
 - -Wsemigroup
 
 data-files:
-- ../soothsayer/example.py
 - ../database.env
 
 executables:
@@ -76,16 +75,13 @@ executables:
     - money-maker-eventful
     - money-maker-price-preprocessor
     - base
-    - aeson
     - bytestring
     - load-env
     - monad-logger
     - persistent
     - persistent-postgresql
-    - process
     - protolude
     - resource-pool
     - stm
-    - text
     - wuss
     - time
