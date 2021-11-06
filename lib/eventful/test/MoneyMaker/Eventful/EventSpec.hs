@@ -107,21 +107,21 @@ data UserCommand
 data UserCommandError
   = UserAlreadyExists UserAlreadyExistsError
   | UserDoesntExist UserDoesntExistError
-  deriving stock (Show)
+  deriving stock (Eq, Show)
 
 data UserAlreadyExistsError
   = UserAlreadyExistsError
       { message :: !Text
       , userId  :: !(Id "user")
       }
-  deriving stock (Show)
+  deriving stock (Show, Eq)
 
 data UserDoesntExistError
   = UserDoesntExistError
       { message :: !Text
       , userId  :: !(Id "user")
       }
-  deriving stock (Show)
+  deriving stock (Show, Eq)
 
 instance Command UserCommand UserEvent where
   type CommandError UserCommand = UserCommandError

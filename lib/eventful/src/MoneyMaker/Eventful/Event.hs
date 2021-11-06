@@ -20,7 +20,7 @@ import qualified Data.UUID  as UUID
 -- with type-level values of any "kind", for example, type-level strings
 newtype Id (tag :: Symbol)
   = Id { getId :: UUID.UUID }
-  deriving newtype (Show)
+  deriving newtype (Show, Eq)
 
 class
   ( Aeson.ToJSON event

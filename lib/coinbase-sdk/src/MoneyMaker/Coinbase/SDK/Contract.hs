@@ -24,7 +24,7 @@ import qualified Test.QuickCheck                   as QC
 import qualified Test.QuickCheck.Arbitrary.Generic as QC
 import           Test.QuickCheck.Instances         ()
 
--- TODO: this price type is only good when USD is the quote currency
+-- NOTE: this price type is only good when USD is the quote currency
 -- pretty much any other quote currency will have more than 2 decimal places
 newtype Price
   = Price { getPrice :: Fixed.Centi }

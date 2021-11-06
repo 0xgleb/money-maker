@@ -45,7 +45,7 @@ applyCommand = applyCommandWithProxy $ Proxy @event
 
 data CouldntDecodeEventError
   = CouldntDecodeEventError Prelude.String
-  deriving stock (Show)
+  deriving stock (Eq, Show)
 
 class MonadUltraError m => MonadEventStore (m :: [Type] -> Type -> Type) where
   type MonomorphicEvent m :: Type

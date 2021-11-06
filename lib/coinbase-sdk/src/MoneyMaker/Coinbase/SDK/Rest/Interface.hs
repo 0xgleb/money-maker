@@ -60,7 +60,7 @@ data ServantClientError
   | UnsupportedContentType ByteString
   | InvalidContentTypeHeader ByteString
   | ConnectionError
-  deriving stock (Show)
+  deriving stock (Show, Eq)
 
 data HeaderError
   = MissingHeaderError
