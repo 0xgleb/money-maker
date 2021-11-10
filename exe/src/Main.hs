@@ -105,6 +105,7 @@ getLivePriceData connectionPool mode priceDataQueue = do
 
               (print @_ @Coinbase.HeaderError)
 
+              (print @_ @Preprocessor.TimeOfPreviousSaveIsLaterThanCurrentTimeError)
 
 type ProcessPriceDataErrors =
   '[ Eventful.NoEventsFoundError
@@ -112,6 +113,7 @@ type ProcessPriceDataErrors =
    , Preprocessor.NoNewCandlesFoundError
    , Coinbase.ServantClientError
    , Coinbase.HeaderError
+   , Preprocessor.TimeOfPreviousSaveIsLaterThanCurrentTimeError
    ]
 
 processPriceData
@@ -126,7 +128,7 @@ processPriceData
 
 processPriceData priceDataQueue newPriceData = do
   priceData <-
-    Preprocessor.toContractualPriceData @ProcessPriceDataErrors newPriceData
+    Preprocessor.preprocessPriceData @ProcessPriceDataErrors newPriceData
 
   liftIO $ STM.atomically $ STM.writeTQueue priceDataQueue priceData
 

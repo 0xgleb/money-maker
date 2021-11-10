@@ -82,9 +82,5 @@ tests:
     dependencies:
     - money-maker-price-preprocessor
     - hspec
-    - persistent        # TODO: remove
-    - persistent-sqlite # TODO: remove
-    - monad-logger      # TODO: remove
-    - resource-pool     # TODO: remove
     # - generic-random
     # - quickcheck-text

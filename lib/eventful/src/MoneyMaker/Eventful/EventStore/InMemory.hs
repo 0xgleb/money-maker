@@ -34,8 +34,6 @@ toStorableEvent
 toStorableEvent aggregateId
   = StorableEvent (getId aggregateId) . Aeson.toJSON
 
--- TODO: refactor so that it takes m :: [Type] -> Type -> Type instead of using
--- UltraExceptT. This way it will be more composable
 -- | Non-persisted in-memory event store for testing
 newtype InMemoryEventStoreT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
   = InMemoryEventStoreT

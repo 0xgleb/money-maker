@@ -4,7 +4,9 @@
 
 module MoneyMaker.PricePreprocessor
   ( PriceData
-  , toContractualPriceData
+  , preprocessPriceData
+  , PreprocessPriceDataErrors
+  , TimeOfPreviousSaveIsLaterThanCurrentTimeError(..)
 
   , swingsAggregateId
 
@@ -17,6 +19,8 @@ module MoneyMaker.PricePreprocessor
 
   -- Exports for testing:
   , catchUpWithTheMarket
+  , CatchUpWithTheMarketErrors
+
   , deriveGranularity
   , roundToGranularity
   , generateSwingCommands
@@ -37,7 +41,7 @@ import Protolude
 
 import qualified Data.Aeson                        as Aeson
 import qualified Data.Generics.Product             as Generics
-import qualified Data.Time.Clock                   as Time
+import qualified Data.Time                         as Time
 import qualified Test.QuickCheck                   as QC
 import qualified Test.QuickCheck.Arbitrary.Generic as QC
 
@@ -62,20 +66,25 @@ swingsAggregateId
   = Eventful.Id [Eventful.uuid|123e4567-e89b-12d3-a456-426614174000|]
 
 
-toContractualPriceData
+type PreprocessPriceDataErrors =
+  '[ Eventful.NoEventsFoundError
+   , Eventful.CouldntDecodeEventError
+   , Coinbase.ServantClientError
+   , NoNewCandlesFoundError
+   , TimeOfPreviousSaveIsLaterThanCurrentTimeError
+   ]
+
+preprocessPriceData
   :: forall errors m
    . ( Eventful.MonadEventStore m
      , Coinbase.CoinbaseRestAPI m
-     , Eventful.NoEventsFoundError `Error.Elem` errors
-     , Eventful.CouldntDecodeEventError `Error.Elem` errors
-     , NoNewCandlesFoundError `Error.Elem` errors
-     , Coinbase.ServantClientError `Error.Elem` errors
+     , PreprocessPriceDataErrors `Error.Elems` errors
      , MonadPrinter m
      )
   => Coinbase.TickerPriceData
   -> m errors PriceData
 
-toContractualPriceData Coinbase.TickerPriceData{ time = currentTime, ..} = do
+preprocessPriceData Coinbase.TickerPriceData{ time = currentTime, ..} = do
   savedSwings <-
     Error.catchVoid $ Eventful.getAggregate @SwingEvent swingsAggregateId
 
@@ -104,13 +113,25 @@ instance QC.Arbitrary NoNewCandlesFoundError where
   arbitrary = QC.genericArbitrary
   shrink    = QC.genericShrink
 
+data TimeOfPreviousSaveIsLaterThanCurrentTimeError
+  = TimeOfPreviousSaveIsLaterThanCurrentTimeError
+      { currentTime        :: Time.UTCTime
+      , timeOfPreviousSave :: Time.UTCTime
+      }
+  deriving stock (Generic, Show, Eq)
+
+type CatchUpWithTheMarketErrors =
+  '[ Eventful.NoEventsFoundError
+   , Eventful.CouldntDecodeEventError
+   , Coinbase.ServantClientError
+   , NoNewCandlesFoundError
+   , TimeOfPreviousSaveIsLaterThanCurrentTimeError
+   ]
+
 catchUpWithTheMarket
   :: ( Eventful.MonadEventStore m
      , Coinbase.CoinbaseRestAPI m
-     , Eventful.NoEventsFoundError `Error.Elem` errors
-     , Eventful.CouldntDecodeEventError `Error.Elem` errors
-     , NoNewCandlesFoundError `Error.Elem` errors
-     , Coinbase.ServantClientError `Error.Elem` errors
+     , CatchUpWithTheMarketErrors `Error.Elems` errors
      , MonadPrinter m
      )
   => Coinbase.TradingPair
@@ -122,15 +143,25 @@ catchUpWithTheMarket productId currentTime savedSwings = do
   let timeOfPreviousSave
         = getTime $ getLastPrice savedSwings
 
-      granularity -- TODO: throw an error if the difference is negative
-        = deriveGranularity $ Time.diffUTCTime currentTime timeOfPreviousSave
+  when (currentTime < timeOfPreviousSave)
+    $ Error.throwUltraError
+        TimeOfPreviousSaveIsLaterThanCurrentTimeError{..}
 
-  -- TODO: you need to make sure you're not requesting more than 300 candles
+  let granularity
+        = deriveGranularity $ currentTime `Time.diffUTCTime` timeOfPreviousSave
+
+      startTime
+        = roundToGranularity granularity timeOfPreviousSave
+
+      endTime
+        = limitTo300Days startTime
+        $ roundToGranularity granularity currentTime
+
   consolidatedCandles <-
     consolidateCandles . fmap Generics.upcast
       <$> Coinbase.getCandles productId
-            (roundToGranularity granularity timeOfPreviousSave)
-            (roundToGranularity granularity currentTime)
+            startTime
+            endTime
             (restrictedGranularityToCoinbaseGranularity granularity)
 
   let swingCommands
@@ -163,6 +194,14 @@ catchUpWithTheMarket productId currentTime savedSwings = do
 
     OneDay ->
       catchUpWithTheMarket productId currentTime newSwings
+
+  where
+    limitTo300Days startTime endTime
+      | endTime `Time.diffUTCTime` startTime <= 299 * Time.nominalDay
+      = endTime
+
+      | otherwise
+      = Time.UTCTime (299 `Time.addDays` Time.utctDay startTime) 0
 
 
 data RestrictedGranularity

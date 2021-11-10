@@ -34,13 +34,6 @@ spec =  do
 
   describeCatchUpWithTheMarket
 
-type CatchUpWithTheMarketErrors =
-  '[ Eventful.NoEventsFoundError
-   , Eventful.CouldntDecodeEventError
-   , NoNewCandlesFoundError
-   , Coinbase.ServantClientError
-   ]
-
 describeCatchUpWithTheMarket :: Spec
 describeCatchUpWithTheMarket = describe "catchUpWithTheMarket" do
   it "passes the example test case" do
