@@ -6,26 +6,20 @@ module Main where
 
 import Environment
 
-import qualified MoneyMaker.Coinbase.SDK      as Coinbase
-import qualified MoneyMaker.Error             as Error
-import qualified MoneyMaker.Eventful          as Eventful
-import           MoneyMaker.MonadPrinter
-import qualified MoneyMaker.PricePreprocessor as Preprocessor
+import MoneyMaker.Based
 
-import Protolude
+import qualified MoneyMaker.Coinbase.SDK      as Coinbase
+import qualified MoneyMaker.Eventful          as Eventful
+import qualified MoneyMaker.PricePreprocessor as Preprocessor
 
 import qualified Control.Concurrent.STM      as STM
 import qualified Control.Monad.Logger        as Logger
-import qualified Data.Aeson                  as Aeson
 import qualified Data.Pool                   as Pool
-import qualified Data.Text.Lazy.IO           as Txt.LIO
 import qualified Data.Time                   as Time
 import qualified Database.Persist.Postgresql as Postgres
 import qualified Database.Persist.Sql        as Persist
-import qualified Paths_exe                   as Path
 import qualified Prelude
 import qualified System.IO                   as IO
-import qualified System.Process              as Proc
 import qualified Wuss
 
 deriving newtype instance Eventful.MonadEventStore m
@@ -33,17 +27,16 @@ deriving newtype instance Eventful.MonadEventStore m
 
 main :: IO ()
 main = do
-  Error.runUltraExceptTWithoutErrors $ Coinbase.runSandboxCoinbaseRestT
-    $ Error.handleAllErrors
-        @'[Coinbase.ServantClientError, Coinbase.HeaderError]
-        ( print =<< Coinbase.getCandles
-            (Coinbase.TradingPair Coinbase.BTC Coinbase.USD)
-            (Time.UTCTime (Time.fromGregorian 2021 9 12) (17 * 60 * 60))
-            (Time.UTCTime (Time.fromGregorian 2021 9 12) (17 * 60 * 60 + 55 * 60))
-            Coinbase.OneMinute
-        )
-        print
-        print
+  runUltraExceptTWithoutErrors $ Coinbase.runSandboxCoinbaseRestT $ handleAllErrors
+    @'[Coinbase.ServantClientError, Coinbase.HeaderError]
+    ( print =<< Coinbase.getCandles
+        (Coinbase.TradingPair Coinbase.BTC Coinbase.USD)
+        (Time.UTCTime (Time.fromGregorian 2021 9 12) (17 * 60 * 60))
+        (Time.UTCTime (Time.fromGregorian 2021 9 12) (17 * 60 * 60 + 55 * 60))
+        Coinbase.OneMinute
+    )
+    print
+    print
 
   when False $ do
     Environment{..} <- getEnvironment
@@ -70,22 +63,21 @@ main = do
           void $ forkIO $ getLivePriceData connectionPool mode priceDataQueue
 
           void $ forever $ do
-            prediction <- STM.atomically $ STM.readTQueue predictionQueue
-            handlePrediction prediction
+            executionOrders <- STM.atomically $ STM.readTQueue predictionQueue
+            executeNewOrders executionOrders
 
   where
-
     -- placeholder for the function that will take a new prediction from the
     -- prediction process and evaluate whether it needs to make any changes
     -- to the portfolio based on that
-    handlePrediction Preprocessor.ContractualPrediction{..} = do
+    executeNewOrders Preprocessor.ExecutionOrders{..} = do
       putStrLn message
 
 
 getLivePriceData
   :: Postgres.ConnectionPool
   -> Mode
-  -> STM.TQueue Preprocessor.ContractualPriceData
+  -> STM.TQueue Preprocessor.PriceData
   -> IO ()
 getLivePriceData connectionPool mode priceDataQueue = do
   let websocketHost = case mode of
@@ -96,7 +88,7 @@ getLivePriceData connectionPool mode priceDataQueue = do
     $ Coinbase.websocketsClient \newPriceData ->
         Eventful.runSqlEventStoreTWithoutErrors connectionPool
           $ Coinbase.runSandboxCoinbaseRestT
-          $ Error.handleAllErrors @ProcessPriceDataErrors
+          $ handleAllErrors @ProcessPriceDataErrors
               (processPriceData priceDataQueue newPriceData)
 
               (\Eventful.NoEventsFoundError -> putStrLn @Text "No events found")
@@ -110,6 +102,7 @@ getLivePriceData connectionPool mode priceDataQueue = do
 
               (print @_ @Coinbase.HeaderError)
 
+              (print @_ @Preprocessor.TimeOfPreviousSaveIsLaterThanCurrentTimeError)
 
 type ProcessPriceDataErrors =
   '[ Eventful.NoEventsFoundError
@@ -117,6 +110,7 @@ type ProcessPriceDataErrors =
    , Preprocessor.NoNewCandlesFoundError
    , Coinbase.ServantClientError
    , Coinbase.HeaderError
+   , Preprocessor.TimeOfPreviousSaveIsLaterThanCurrentTimeError
    ]
 
 processPriceData
@@ -125,87 +119,42 @@ processPriceData
      , Coinbase.CoinbaseRestAPI m
      , MonadPrinter m
      )
-  => STM.TQueue Preprocessor.ContractualPriceData
+  => STM.TQueue Preprocessor.PriceData
   -> Coinbase.TickerPriceData
   -> m ProcessPriceDataErrors ()
 
 processPriceData priceDataQueue newPriceData = do
   priceData <-
-    Preprocessor.toContractualPriceData @ProcessPriceDataErrors newPriceData
+    Preprocessor.preprocessPriceData @ProcessPriceDataErrors newPriceData
 
   liftIO $ STM.atomically $ STM.writeTQueue priceDataQueue priceData
 
+
 spawnPredictionProcessAndBindToQueues
-  :: IO (STM.TQueue Preprocessor.ContractualPriceData, STM.TQueue Preprocessor.ContractualPrediction)
+  :: IO
+       ( STM.TQueue Preprocessor.PriceData
+       , STM.TQueue Preprocessor.ExecutionOrders
+       )
 spawnPredictionProcessAndBindToQueues = do
   priceDataQueue <- STM.newTQueueIO
   predictionsQueue <- STM.newTQueueIO
 
-  -- TODO: remove the Python integration. we don't really need it at the moment. save this file for later though
-  (inputHandle, outputHandle, processHandle) <- createProcess "example"
-  -- TODO: try pinging the process before spawning everything else
-
-  -- need a separate thread to run the infinite loop
-  void $ forkIO $ do
-    bindPriceDataQueueToProcessInput priceDataQueue inputHandle
-    void $ Proc.terminateProcess processHandle
-
   -- need a separate thread to run the infinite loop
   void $ forkIO
-    $ bindProcessOutputToPredictionsQueue outputHandle predictionsQueue
+    $ bindMarketReaderToFundsManager priceDataQueue predictionsQueue
 
   pure (priceDataQueue, predictionsQueue)
 
-  where
-    createProcess strategy = do
-      scriptPath <- Path.getDataFileName $ "../soothsayer/" <> strategy <> ".py"
 
-      (Just inputHandle, Just outputHandle, _, processHandle) <-
-        Proc.createProcess (Proc.proc "/usr/bin/python3" [scriptPath])
-          { Proc.std_in = Proc.CreatePipe, Proc.std_out = Proc.CreatePipe }
-
-      IO.hSetBuffering inputHandle  IO.NoBuffering
-      IO.hSetBuffering outputHandle IO.NoBuffering
-
-      pure (InputHandle inputHandle, OutputHandle outputHandle, processHandle)
-
-newtype InputHandle
-  = InputHandle { unpackInputHandle :: Handle }
-  deriving newtype (Show)
-
--- | This function reads from the queue whenever there is something in there
--- and writes the new data into the input handle of the predictions process.
--- The reason it only reads from the queue whenver there is something in there
--- and doesn't just continuously run in an infinite loop is the @atomically@
--- function, which blocks execution until there is something in the queue
-bindPriceDataQueueToProcessInput
-  :: STM.TQueue Preprocessor.ContractualPriceData
-  -> InputHandle
+bindMarketReaderToFundsManager
+  :: STM.TQueue Preprocessor.PriceData
+  -> STM.TQueue Preprocessor.ExecutionOrders
   -> IO ()
-bindPriceDataQueueToProcessInput priceDataQueue inputHandle = do
-  contractualPriceData <- STM.atomically $ STM.readTQueue priceDataQueue
+bindMarketReaderToFundsManager marketQueue managerQueue = do
+  _contractualPriceData <- STM.atomically $ STM.readTQueue marketQueue
 
-  hPutStrLn (unpackInputHandle inputHandle) $ Aeson.encode contractualPriceData
+  STM.atomically $ STM.writeTQueue managerQueue Preprocessor.ExecutionOrders
+    { message = "Hello"
+    }
 
-  bindPriceDataQueueToProcessInput priceDataQueue inputHandle
-
-newtype OutputHandle
-  = OutputHandle { unpackOutputHandle :: Handle }
-  deriving newtype (Show)
-
--- | This function reads from the prediction process output and writes new
--- predictions into the prediction queue whenever there is a new line with a
--- prediction in the output
-bindProcessOutputToPredictionsQueue
-  :: OutputHandle
-  -> STM.TQueue Preprocessor.ContractualPrediction
-  -> IO ()
-bindProcessOutputToPredictionsQueue
-  outputHandle@(OutputHandle unpackedOutputHandle)
-  predictionsQueue
-  = do
-  closed <- IO.hIsClosed unpackedOutputHandle
-  unless closed $ do
-    message <- Txt.LIO.hGetLine unpackedOutputHandle
-    STM.atomically $ STM.writeTQueue predictionsQueue Preprocessor.ContractualPrediction{..}
-    bindProcessOutputToPredictionsQueue outputHandle predictionsQueue
+  bindMarketReaderToFundsManager marketQueue managerQueue

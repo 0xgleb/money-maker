@@ -3,14 +3,12 @@ version:             0.1.0.0
 license:             BSD3
 
 dependencies:
+- money-maker-based
 - base
 - aeson
 - bytestring
 - persistent
-- protolude
-- template-haskell
 - uuid
-- money-maker-error
 
 library:
   source-dirs: src

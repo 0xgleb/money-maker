@@ -8,12 +8,11 @@ module MoneyMaker.Eventful.EventStore.InMemory
   )
   where
 
-import MoneyMaker.Error
 import MoneyMaker.Eventful.Command
 import MoneyMaker.Eventful.Event
 import MoneyMaker.Eventful.EventStore.Interface
 
-import Protolude
+import MoneyMaker.Based
 
 import qualified Data.Aeson as Aeson
 import qualified Data.UUID  as UUID
@@ -34,8 +33,6 @@ toStorableEvent
 toStorableEvent aggregateId
   = StorableEvent (getId aggregateId) . Aeson.toJSON
 
--- TODO: refactor so that it takes m :: [Type] -> Type -> Type instead of using
--- UltraExceptT. This way it will be more composable
 -- | Non-persisted in-memory event store for testing
 newtype InMemoryEventStoreT (m :: Type -> Type) (errors :: [Type]) (a :: Type)
   = InMemoryEventStoreT

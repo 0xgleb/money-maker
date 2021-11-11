@@ -19,7 +19,7 @@ module MoneyMaker.PricePreprocessor.Swings
 import qualified MoneyMaker.Coinbase.SDK as Coinbase
 import qualified MoneyMaker.Eventful     as Eventful
 
-import Protolude
+import MoneyMaker.Based
 
 import qualified Prelude
 import qualified Data.Aeson                        as Aeson

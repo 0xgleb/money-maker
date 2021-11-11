@@ -8,12 +8,12 @@ module MoneyMaker.Eventful.EventStore.Interface
   )
   where
 
-import MoneyMaker.Error
 import MoneyMaker.Eventful.Command
 import MoneyMaker.Eventful.Event
 
+import MoneyMaker.Based
+
 import qualified Prelude
-import           Protolude
 
 getAggregate
   :: forall event errors m
@@ -45,7 +45,7 @@ applyCommand = applyCommandWithProxy $ Proxy @event
 
 data CouldntDecodeEventError
   = CouldntDecodeEventError Prelude.String
-  deriving stock (Show)
+  deriving stock (Eq, Show)
 
 class MonadUltraError m => MonadEventStore (m :: [Type] -> Type -> Type) where
   type MonomorphicEvent m :: Type

@@ -6,11 +6,12 @@ module MoneyMaker.Coinbase.SDK.WebsocketsSpec
 import MoneyMaker.Coinbase.SDK.Contract
 import MoneyMaker.Coinbase.SDK.Websockets
 
+import MoneyMaker.Based
+
 import qualified Data.Aeson         as Aeson
 import qualified Data.Aeson.QQ      as Aeson
 import qualified Data.Time.Calendar as Time
 import qualified Data.Time.Clock    as Time
-import           Protolude
 
 import Test.Hspec
 import Test.Hspec.Expectations.Json

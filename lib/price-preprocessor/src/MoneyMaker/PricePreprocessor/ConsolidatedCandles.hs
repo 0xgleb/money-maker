@@ -14,7 +14,7 @@ import MoneyMaker.PricePreprocessor.Swings
 
 import qualified MoneyMaker.Coinbase.SDK as Coinbase
 
-import Protolude
+import MoneyMaker.Based
 
 import qualified Data.List.NonEmpty as NE
 import qualified Prelude

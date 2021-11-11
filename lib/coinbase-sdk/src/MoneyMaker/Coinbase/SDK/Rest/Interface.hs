@@ -12,9 +12,7 @@ module MoneyMaker.Coinbase.SDK.Rest.Interface
 
 import MoneyMaker.Coinbase.SDK.Contract
 
-import qualified MoneyMaker.Error as Error
-
-import Protolude
+import MoneyMaker.Based
 
 import qualified Data.Time.Clock                   as Time
 import qualified Servant.API                       as Servant
@@ -22,9 +20,9 @@ import qualified Test.QuickCheck                   as QC
 import qualified Test.QuickCheck.Arbitrary.Generic as QC
 
 
-class Error.MonadUltraError m => CoinbaseRestAPI m where
+class MonadUltraError m => CoinbaseRestAPI m where
   getCandles
-    :: ( ServantClientError `Error.Elem` errors
+    :: ( ServantClientError `Elem` errors
        )
     => TradingPair
     -> Time.UTCTime
@@ -60,7 +58,7 @@ data ServantClientError
   | UnsupportedContentType ByteString
   | InvalidContentTypeHeader ByteString
   | ConnectionError
-  deriving stock (Show)
+  deriving stock (Show, Eq)
 
 data HeaderError
   = MissingHeaderError

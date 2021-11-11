@@ -5,11 +5,10 @@ module MoneyMaker.PricePreprocessor.SwingsSpec
   where
 
 import qualified MoneyMaker.Coinbase.SDK             as Coinbase
-import qualified MoneyMaker.Error                    as Error
 import qualified MoneyMaker.Eventful                 as Eventful
 import           MoneyMaker.PricePreprocessor.Swings
 
-import Protolude
+import MoneyMaker.Based
 import Test.Hspec
 
 import qualified Data.Time as Time
@@ -24,9 +23,9 @@ spec :: Spec
 spec = do
   describe "Eventful SwingEvent" $ do
     it "extracts all swings from price data" $ do
-      let result :: Either (Error.OneOf Errors) Swings
+      let result :: Either (OneOf Errors) Swings
             = fmap fst $ runIdentity $ Eventful.runInMemoryEventStoreT [] $ do
-                let id = Eventful.Id [Eventful.uuid|123e4567-e89b-12d3-a456-426614174000|]
+                let id = Eventful.Id [uuidQuasiQuoter|123e4567-e89b-12d3-a456-426614174000|]
 
                 _ <- forM prices $ Eventful.applyCommand id . AddNewPrice
 

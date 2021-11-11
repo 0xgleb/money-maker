@@ -12,12 +12,11 @@ module MoneyMaker.Eventful.EventStore.Persistent
   )
   where
 
-import MoneyMaker.Error
 import MoneyMaker.Eventful.Command
 import MoneyMaker.Eventful.Event
 import MoneyMaker.Eventful.EventStore.Interface
 
-import Protolude
+import MoneyMaker.Based
 
 import qualified Data.Aeson           as Aeson
 import qualified Data.ByteString.Lazy as BSL

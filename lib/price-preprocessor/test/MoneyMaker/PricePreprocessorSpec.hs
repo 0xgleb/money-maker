@@ -12,15 +12,14 @@ import MoneyMaker.PricePreprocessor
 import MoneyMaker.PricePreprocessor.ConsolidatedCandles
 
 import qualified MoneyMaker.Coinbase.SDK as Coinbase
-import qualified MoneyMaker.Error        as Error
 import qualified MoneyMaker.Eventful     as Eventful
 
-import Protolude
-import Test.Hspec
-import Test.QuickCheck
+import MoneyMaker.Based
 
 import qualified Data.Generics.Product as Generics
 import qualified Data.Time             as Time
+import           Test.Hspec
+import           Test.QuickCheck
 
 spec :: Spec
 spec =  do
@@ -33,13 +32,6 @@ spec =  do
   describeRoundToGranularity
 
   describeCatchUpWithTheMarket
-
-type CatchUpWithTheMarketErrors =
-  '[ Eventful.NoEventsFoundError
-   , Eventful.CouldntDecodeEventError
-   , NoNewCandlesFoundError
-   , Coinbase.ServantClientError
-   ]
 
 describeCatchUpWithTheMarket :: Spec
 describeCatchUpWithTheMarket = describe "catchUpWithTheMarket" do
@@ -63,13 +55,13 @@ describeCatchUpWithTheMarket = describe "catchUpWithTheMarket" do
 
         (result, logs)
           = runPricePreprocessorMonad @CatchUpWithTheMarketErrors initialEvents do
-              void $ Error.catchVoid $ Eventful.applyCommand swingsAggregateId $ AddNewPrice TimedPrice
+              void $ catchVoid $ Eventful.applyCommand swingsAggregateId $ AddNewPrice TimedPrice
                 { time  = Time.UTCTime (Time.fromGregorian 2021 8 30) 0
                 , price = Coinbase.Price 48815.00
                 }
 
               savedSwings <-
-                Error.catchVoid (Eventful.getAggregate @SwingEvent swingsAggregateId)
+                catchVoid (Eventful.getAggregate @SwingEvent swingsAggregateId)
 
               void $ catchUpWithTheMarket
                   (Coinbase.TradingPair Coinbase.BTC Coinbase.USD)
@@ -78,7 +70,7 @@ describeCatchUpWithTheMarket = describe "catchUpWithTheMarket" do
                       (17 * hour + 55 * minute + 37) )
                   savedSwings
 
-              Error.catchVoid $ Eventful.getAggregate @SwingEvent swingsAggregateId
+              catchVoid $ Eventful.getAggregate @SwingEvent swingsAggregateId
 
         mkTime' day hours minutes
           = Time.UTCTime
@@ -173,6 +165,7 @@ describeGenerateSwingCommands = describe "generateSwingCommands" do
         generateSwingCommands error swings (OneCandle candle)
           `shouldBe` Right (processSingleCandle swings $ Generics.upcast candle)
 
+  -- TODO: there is a certain case that happens pretty rarely that fails. gotta investigate that
   it "generates the same commands if you turn the commands into candles - without last candle"
     $ property \error swings (ArbitraryExtremums extremums) ->
         case generateSwingCommands error swings (ConsolidatedCandles Nothing extremums) of

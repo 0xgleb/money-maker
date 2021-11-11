@@ -3,18 +3,17 @@ module MoneyMaker.Eventful.EventStore.PersistentSpec
   )
   where
 
+import MoneyMaker.Eventful
 import MoneyMaker.Eventful.EventSpec          hiding (spec)
 import MoneyMaker.Eventful.EventStore.Helpers
 
-import MoneyMaker.Eventful
-
-import Protolude
-import Test.Hspec
+import MoneyMaker.Based
 
 import qualified Control.Monad.Logger    as Logger
 import qualified Data.Pool               as Pool
 import qualified Database.Persist.Sql    as Persist
 import qualified Database.Persist.Sqlite as Sqlite
+import           Test.Hspec
 
 spec :: Spec
 spec = do

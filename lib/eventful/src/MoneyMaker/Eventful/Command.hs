@@ -5,7 +5,7 @@ module MoneyMaker.Eventful.Command
 
 import MoneyMaker.Eventful.Event
 
-import Protolude
+import MoneyMaker.Based
 
 class Eventful event => Command command event | command -> event where
   type family CommandError command :: Type

@@ -3,8 +3,8 @@ version:             0.1.0.0
 license:             BSD3
 
 dependencies:
+- money-maker-based
 - money-maker-coinbase-sdk
-- money-maker-error
 - money-maker-eventful
 - base
 - QuickCheck
@@ -82,9 +82,5 @@ tests:
     dependencies:
     - money-maker-price-preprocessor
     - hspec
-    - persistent        # TODO: remove
-    - persistent-sqlite # TODO: remove
-    - monad-logger      # TODO: remove
-    - resource-pool     # TODO: remove
     # - generic-random
     # - quickcheck-text

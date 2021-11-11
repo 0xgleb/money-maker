@@ -3,7 +3,7 @@ version:             0.1.0.0
 license:             BSD3
 
 dependencies:
-- money-maker-error
+- money-maker-based
 - base
 - QuickCheck
 - aeson
@@ -11,7 +11,6 @@ dependencies:
 - generic-arbitrary
 - http-client
 - http-client-tls
-- protolude
 - quickcheck-instances
 - servant
 - servant-client

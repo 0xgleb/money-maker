@@ -109,9 +109,19 @@ instance Prelude.Show x => Prelude.Show (OneOf '[x]) where
     Other rest ->
       case rest of
 
--- TODO: implement this. required for unit tests
-instance Prelude.Eq (OneOf xs) where
-  _ == _ = Prelude.error "implement Eq OneOf"
+
+
+type family AllHaveEq (list :: [Type]) :: Constraint where
+  AllHaveEq '[] = ()
+
+  AllHaveEq (x:xs) = (Eq x, AllHaveEq xs)
+
+instance AllHaveEq xs => Prelude.Eq (OneOf xs) where
+  ThisOne x == ThisOne y = x == y
+
+  Other xs == Other ys = xs == ys
+
+  _ == _ = False
 
 -- | In order to implement @MonadUltraError@, we need to be able to check what's
 -- inside a @OneOf@ so that if it has the error we are trying to handle, we can
