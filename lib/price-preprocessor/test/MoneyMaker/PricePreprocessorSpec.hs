@@ -165,6 +165,7 @@ describeGenerateSwingCommands = describe "generateSwingCommands" do
         generateSwingCommands error swings (OneCandle candle)
           `shouldBe` Right (processSingleCandle swings $ Generics.upcast candle)
 
+  -- TODO: there is a certain case that happens pretty rarely that fails. gotta investigate that
   it "generates the same commands if you turn the commands into candles - without last candle"
     $ property \error swings (ArbitraryExtremums extremums) ->
         case generateSwingCommands error swings (ConsolidatedCandles Nothing extremums) of
