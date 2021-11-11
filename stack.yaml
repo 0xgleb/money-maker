@@ -30,6 +30,7 @@ resolver: lts-18.15
 #   - wai
 packages:
 - ./exe
+- ./lib/based
 - ./lib/coinbase-sdk
 - ./lib/error
 - ./lib/eventful

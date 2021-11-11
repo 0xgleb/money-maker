@@ -8,12 +8,11 @@ module MoneyMaker.Eventful.EventStore.InMemory
   )
   where
 
-import MoneyMaker.Error
 import MoneyMaker.Eventful.Command
 import MoneyMaker.Eventful.Event
 import MoneyMaker.Eventful.EventStore.Interface
 
-import Protolude
+import MoneyMaker.Based
 
 import qualified Data.Aeson as Aeson
 import qualified Data.UUID  as UUID

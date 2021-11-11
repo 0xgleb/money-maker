@@ -16,7 +16,7 @@ module MoneyMaker.Coinbase.SDK.Websockets
 
 import MoneyMaker.Coinbase.SDK.Contract
 
-import Protolude
+import MoneyMaker.Based
 
 import qualified Control.Monad.Fail as Fail
 import           Data.Aeson         ((.:), (.=))

@@ -5,7 +5,7 @@ module Environment
   )
   where
 
-import Protolude
+import MoneyMaker.Based
 
 import qualified Data.ByteString.Char8 as BS
 import qualified LoadEnv

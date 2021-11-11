@@ -16,9 +16,7 @@ module MoneyMaker.Coinbase.SDK.Rest.Client
 import MoneyMaker.Coinbase.SDK.Contract
 import MoneyMaker.Coinbase.SDK.Rest.Interface
 
-import qualified MoneyMaker.Error as Error
-
-import Protolude
+import MoneyMaker.Based
 
 import qualified Data.ByteString.Lazy    as BSL
 import qualified Data.Time.Clock         as Time
@@ -40,7 +38,7 @@ type SandboxCoinbaseRestT
 
 newtype SandboxCoinbaseRestT m errors a
   = SandboxCoinbaseRestT { runSandboxCoinbaseRestT :: m errors a }
-  deriving newtype (Functor, Applicative, Monad, MonadIO, Error.MonadUltraError)
+  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadUltraError)
 
 instance (forall errors. Monad (m errors))
   => HasBaseUrlHost (SandboxCoinbaseRestT m)
@@ -56,7 +54,7 @@ type ProductionCoinbaseRestT
 
 newtype ProductionCoinbaseRestT m errors a
   = ProductionCoinbaseRestT { runProductionCoinbaseRestT :: m errors a }
-  deriving newtype (Functor, Applicative, Monad, MonadIO, Error.MonadUltraError)
+  deriving newtype (Functor, Applicative, Monad, MonadIO, MonadUltraError)
 
 instance (forall errors. Monad (m errors))
   => HasBaseUrlHost (ProductionCoinbaseRestT m)
@@ -66,7 +64,7 @@ instance (forall errors. Monad (m errors))
 
 
 instance {-# OVERLAPPABLE #-}
-  ( Error.MonadUltraError m
+  ( MonadUltraError m
   , forall errors. MonadIO (m errors)
   , HasBaseUrlHost m
   ) => CoinbaseRestAPI m
@@ -101,8 +99,8 @@ type API
        -- (Servant.Headers '[Servant.Header "CB-AFTER" PaginationId] )
 
 getCandlesServant
-  :: ( Error.MonadUltraError m
-     , ServantClientError `Error.Elem` errors
+  :: ( MonadUltraError m
+     , ServantClientError `Elem` errors
      , HasBaseUrlHost m
      , MonadIO (m errors)
      )
@@ -119,8 +117,8 @@ getCandlesServant
   = Servant.hoistClient api naturalTransformation (Servant.client api)
   where
     naturalTransformation
-      :: ( Error.MonadUltraError m
-         , ServantClientError `Error.Elem` errors
+      :: ( MonadUltraError m
+         , ServantClientError `Elem` errors
          , HasBaseUrlHost m
          , MonadIO (m errors)
          )
@@ -148,7 +146,7 @@ getCandlesServant
           pure success
 
         Left clientError ->
-          Error.throwUltraError $ case clientError of
+          throwUltraError $ case clientError of
             Servant.FailureResponse _request response ->
               FailureResponse $ BSL.toStrict $ Servant.responseBody response
 

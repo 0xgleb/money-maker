@@ -6,13 +6,11 @@ module Main where
 
 import Environment
 
-import qualified MoneyMaker.Coinbase.SDK      as Coinbase
-import qualified MoneyMaker.Error             as Error
-import qualified MoneyMaker.Eventful          as Eventful
-import           MoneyMaker.MonadPrinter
-import qualified MoneyMaker.PricePreprocessor as Preprocessor
+import MoneyMaker.Based
 
-import Protolude
+import qualified MoneyMaker.Coinbase.SDK      as Coinbase
+import qualified MoneyMaker.Eventful          as Eventful
+import qualified MoneyMaker.PricePreprocessor as Preprocessor
 
 import qualified Control.Concurrent.STM      as STM
 import qualified Control.Monad.Logger        as Logger
@@ -29,17 +27,16 @@ deriving newtype instance Eventful.MonadEventStore m
 
 main :: IO ()
 main = do
-  Error.runUltraExceptTWithoutErrors $ Coinbase.runSandboxCoinbaseRestT
-    $ Error.handleAllErrors
-        @'[Coinbase.ServantClientError, Coinbase.HeaderError]
-        ( print =<< Coinbase.getCandles
-            (Coinbase.TradingPair Coinbase.BTC Coinbase.USD)
-            (Time.UTCTime (Time.fromGregorian 2021 9 12) (17 * 60 * 60))
-            (Time.UTCTime (Time.fromGregorian 2021 9 12) (17 * 60 * 60 + 55 * 60))
-            Coinbase.OneMinute
-        )
-        print
-        print
+  runUltraExceptTWithoutErrors $ Coinbase.runSandboxCoinbaseRestT $ handleAllErrors
+    @'[Coinbase.ServantClientError, Coinbase.HeaderError]
+    ( print =<< Coinbase.getCandles
+        (Coinbase.TradingPair Coinbase.BTC Coinbase.USD)
+        (Time.UTCTime (Time.fromGregorian 2021 9 12) (17 * 60 * 60))
+        (Time.UTCTime (Time.fromGregorian 2021 9 12) (17 * 60 * 60 + 55 * 60))
+        Coinbase.OneMinute
+    )
+    print
+    print
 
   when False $ do
     Environment{..} <- getEnvironment
@@ -91,7 +88,7 @@ getLivePriceData connectionPool mode priceDataQueue = do
     $ Coinbase.websocketsClient \newPriceData ->
         Eventful.runSqlEventStoreTWithoutErrors connectionPool
           $ Coinbase.runSandboxCoinbaseRestT
-          $ Error.handleAllErrors @ProcessPriceDataErrors
+          $ handleAllErrors @ProcessPriceDataErrors
               (processPriceData priceDataQueue newPriceData)
 
               (\Eventful.NoEventsFoundError -> putStrLn @Text "No events found")

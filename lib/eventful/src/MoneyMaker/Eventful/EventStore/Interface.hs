@@ -8,12 +8,12 @@ module MoneyMaker.Eventful.EventStore.Interface
   )
   where
 
-import MoneyMaker.Error
 import MoneyMaker.Eventful.Command
 import MoneyMaker.Eventful.Event
 
+import MoneyMaker.Based
+
 import qualified Prelude
-import           Protolude
 
 getAggregate
   :: forall event errors m

@@ -8,11 +8,9 @@ module MoneyMaker.PricePreprocessor.TestMonad
   where
 
 import qualified MoneyMaker.Coinbase.SDK as Coinbase
-import qualified MoneyMaker.Error        as Error
 import qualified MoneyMaker.Eventful     as Eventful
-import           MoneyMaker.MonadPrinter
 
-import Protolude
+import MoneyMaker.Based
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Time             as Time
@@ -34,7 +32,7 @@ newtype PricePreprocessorTestMonad errors a
     , Applicative
     , Monad
     , MonadIO
-    , Error.MonadUltraError
+    , MonadUltraError
     , Eventful.MonadEventStore
     )
 
@@ -43,14 +41,14 @@ instance MonadPrinter PricePreprocessorTestMonad where
     = PricePreprocessorTestMonad
     $ Eventful.SqlEventStoreT
     $ lift
-    $ Error.liftToUltraExceptT
+    $ liftToUltraExceptT
     $ state $ ((),) . (<> [text])
 
 runPricePreprocessorMonad
   :: forall errors a
    . [Eventful.StorableEvent]
   -> PricePreprocessorTestMonad errors a
-  -> (Either (Error.OneOf errors) a, [Text])
+  -> (Either (OneOf errors) a, [Text])
 
 runPricePreprocessorMonad _initialEvents procedure
   = Unsafe.unsafePerformIO $ Logger.runNoLoggingT $ Sqlite.withSqlitePool ":memory:" 1 $ \connectionPool -> do
@@ -71,7 +69,7 @@ newtype PricePreprocessorTestMonad errors a
     ( Functor
     , Applicative
     , Monad
-    , Error.MonadUltraError
+    , MonadUltraError
     , Eventful.MonadEventStore
     )
 
@@ -80,14 +78,14 @@ instance {-# OVERLAPPING #-} MonadPrinter PricePreprocessorTestMonad where
     = PricePreprocessorTestMonad
     $ Eventful.InMemoryEventStoreT
     $ lift
-    $ Error.liftToUltraExceptT
+    $ liftToUltraExceptT
     $ state $ ((),) . (<> [text])
 
 runPricePreprocessorMonad
   :: forall errors a
    . [Eventful.StorableEvent]
   -> PricePreprocessorTestMonad errors a
-  -> (Either (Error.OneOf errors) a, [Text])
+  -> (Either (OneOf errors) a, [Text])
 
 runPricePreprocessorMonad initialEvents procedure
   = first (fmap fst) $ flip runState []
@@ -116,7 +114,7 @@ instance {-# OVERLAPPING #-} Coinbase.CoinbaseRestAPI PricePreprocessorTestMonad
       = pure sampleMinuteCandles
 
       | otherwise
-      = Error.throwUltraError
+      = throwUltraError
       $ Coinbase.FailureResponse $ "This example is not supported"
       <> " tradingPair = " <> bsShow tradingPair
       <> " startTime = " <> bsShow startTime

@@ -1,7 +1,7 @@
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE UndecidableInstances  #-}
 
-module MoneyMaker.MonadPrinter
+module MoneyMaker.Based.MonadPrinter
   ( MonadPrinter(..)
   )
   where

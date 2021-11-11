@@ -12,15 +12,14 @@ import MoneyMaker.PricePreprocessor
 import MoneyMaker.PricePreprocessor.ConsolidatedCandles
 
 import qualified MoneyMaker.Coinbase.SDK as Coinbase
-import qualified MoneyMaker.Error        as Error
 import qualified MoneyMaker.Eventful     as Eventful
 
-import Protolude
-import Test.Hspec
-import Test.QuickCheck
+import MoneyMaker.Based
 
 import qualified Data.Generics.Product as Generics
 import qualified Data.Time             as Time
+import           Test.Hspec
+import           Test.QuickCheck
 
 spec :: Spec
 spec =  do
@@ -56,13 +55,13 @@ describeCatchUpWithTheMarket = describe "catchUpWithTheMarket" do
 
         (result, logs)
           = runPricePreprocessorMonad @CatchUpWithTheMarketErrors initialEvents do
-              void $ Error.catchVoid $ Eventful.applyCommand swingsAggregateId $ AddNewPrice TimedPrice
+              void $ catchVoid $ Eventful.applyCommand swingsAggregateId $ AddNewPrice TimedPrice
                 { time  = Time.UTCTime (Time.fromGregorian 2021 8 30) 0
                 , price = Coinbase.Price 48815.00
                 }
 
               savedSwings <-
-                Error.catchVoid (Eventful.getAggregate @SwingEvent swingsAggregateId)
+                catchVoid (Eventful.getAggregate @SwingEvent swingsAggregateId)
 
               void $ catchUpWithTheMarket
                   (Coinbase.TradingPair Coinbase.BTC Coinbase.USD)
@@ -71,7 +70,7 @@ describeCatchUpWithTheMarket = describe "catchUpWithTheMarket" do
                       (17 * hour + 55 * minute + 37) )
                   savedSwings
 
-              Error.catchVoid $ Eventful.getAggregate @SwingEvent swingsAggregateId
+              catchVoid $ Eventful.getAggregate @SwingEvent swingsAggregateId
 
         mkTime' day hours minutes
           = Time.UTCTime

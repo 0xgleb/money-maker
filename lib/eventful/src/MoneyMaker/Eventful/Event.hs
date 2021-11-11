@@ -6,21 +6,9 @@ module MoneyMaker.Eventful.Event
   )
   where
 
-import MoneyMaker.Error
-
-import Protolude
+import MoneyMaker.Based
 
 import qualified Data.Aeson as Aeson
-import qualified Data.UUID  as UUID
-
--- | Custom UUID wrapper for differentiating between different kind of ids
--- This allows you to to have, for example, @Id User@ and @Id House@ and
--- the compiler will make sure that you don't mess up and use one in place
--- of another. (tag :: k) part allows you to tag it not only with types but
--- with type-level values of any "kind", for example, type-level strings
-newtype Id (tag :: Symbol)
-  = Id { getId :: UUID.UUID }
-  deriving newtype (Show, Eq)
 
 class
   ( Aeson.ToJSON event

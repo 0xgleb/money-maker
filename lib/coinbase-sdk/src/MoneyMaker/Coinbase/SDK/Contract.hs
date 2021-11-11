@@ -9,8 +9,7 @@ module MoneyMaker.Coinbase.SDK.Contract
   )
   where
 
-import Data.Vector ((!?))
-import Protolude
+import MoneyMaker.Based
 
 import qualified Control.Monad.Fail                as Fail
 import qualified Data.Aeson                        as Aeson
@@ -18,6 +17,7 @@ import qualified Data.Fixed                        as Fixed
 import qualified Data.Text                         as Txt
 import qualified Data.Time.Clock                   as Time
 import qualified Data.Time.Clock.POSIX             as Time
+import           Data.Vector                       ((!?))
 import qualified GHC.Show                          as Show
 import qualified Servant.API                       as Servant
 import qualified Test.QuickCheck                   as QC

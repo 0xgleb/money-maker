@@ -5,7 +5,7 @@ module MoneyMaker.Coinbase.SDK.ContractSpec
 
 import MoneyMaker.Coinbase.SDK.Contract
 
-import Protolude
+import MoneyMaker.Based
 
 import qualified Data.Aeson    as Aeson
 import qualified Data.Aeson.QQ as Aeson

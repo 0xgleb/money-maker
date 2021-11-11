@@ -33,11 +33,9 @@ import MoneyMaker.PricePreprocessor.ConsolidatedCandles
 import MoneyMaker.PricePreprocessor.Swings              as Swings
 
 import qualified MoneyMaker.Coinbase.SDK as Coinbase
-import qualified MoneyMaker.Error        as Error
 import qualified MoneyMaker.Eventful     as Eventful
-import           MoneyMaker.MonadPrinter
 
-import Protolude
+import MoneyMaker.Based
 
 import qualified Data.Aeson                        as Aeson
 import qualified Data.Generics.Product             as Generics
@@ -63,7 +61,7 @@ data PriceData
 -- | Just a random ID. Good enough while we use only one trading pair
 swingsAggregateId :: Eventful.Id "swings"
 swingsAggregateId
-  = Eventful.Id [Eventful.uuid|123e4567-e89b-12d3-a456-426614174000|]
+  = Eventful.Id [uuidQuasiQuoter|123e4567-e89b-12d3-a456-426614174000|]
 
 
 type PreprocessPriceDataErrors =
@@ -78,7 +76,7 @@ preprocessPriceData
   :: forall errors m
    . ( Eventful.MonadEventStore m
      , Coinbase.CoinbaseRestAPI m
-     , PreprocessPriceDataErrors `Error.Elems` errors
+     , PreprocessPriceDataErrors `Elems` errors
      , MonadPrinter m
      )
   => Coinbase.TickerPriceData
@@ -86,7 +84,7 @@ preprocessPriceData
 
 preprocessPriceData Coinbase.TickerPriceData{ time = currentTime, ..} = do
   savedSwings <-
-    Error.catchVoid $ Eventful.getAggregate @SwingEvent swingsAggregateId
+    catchVoid $ Eventful.getAggregate @SwingEvent swingsAggregateId
 
   let timeOfPreviousSave
         = getTime $ getLastPrice savedSwings
@@ -131,7 +129,7 @@ type CatchUpWithTheMarketErrors =
 catchUpWithTheMarket
   :: ( Eventful.MonadEventStore m
      , Coinbase.CoinbaseRestAPI m
-     , CatchUpWithTheMarketErrors `Error.Elems` errors
+     , CatchUpWithTheMarketErrors `Elems` errors
      , MonadPrinter m
      )
   => Coinbase.TradingPair
@@ -144,7 +142,7 @@ catchUpWithTheMarket productId currentTime savedSwings = do
         = getTime $ getLastPrice savedSwings
 
   when (currentTime < timeOfPreviousSave)
-    $ Error.throwUltraError
+    $ throwUltraError
         TimeOfPreviousSaveIsLaterThanCurrentTimeError{..}
 
   let granularity
@@ -172,9 +170,9 @@ catchUpWithTheMarket productId currentTime savedSwings = do
 
   newSwings <- case swingCommands of
     Left error ->
-      Error.throwUltraError error
+      throwUltraError error
 
-    Right (command :| commands) -> Error.catchVoid do
+    Right (command :| commands) -> catchVoid do
       swings <- Eventful.applyCommand swingsAggregateId command
 
       foldM (const $ Eventful.applyCommand swingsAggregateId)

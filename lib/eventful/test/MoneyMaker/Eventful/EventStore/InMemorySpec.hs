@@ -10,11 +10,9 @@ module MoneyMaker.Eventful.EventStore.InMemorySpec
 
 import MoneyMaker.Eventful.EventSpec          hiding (spec)
 import MoneyMaker.Eventful.EventStore.Helpers
-
-import MoneyMaker.Error
 import MoneyMaker.Eventful
 
-import Protolude
+import MoneyMaker.Based
 
 import qualified Data.Aeson as Aeson
 import           Test.Hspec
@@ -51,6 +49,6 @@ spec = do
 
 initialEventStore :: [StorableEvent]
 initialEventStore =
-  [ StorableEvent [uuid|123e4567-e89b-12d3-a456-426614174000|] Aeson.Null
-  , StorableEvent [uuid|123e4666-e89b-12d3-a456-426614174000|] Aeson.Null
+  [ StorableEvent [uuidQuasiQuoter|123e4567-e89b-12d3-a456-426614174000|] Aeson.Null
+  , StorableEvent [uuidQuasiQuoter|123e4666-e89b-12d3-a456-426614174000|] Aeson.Null
   ]

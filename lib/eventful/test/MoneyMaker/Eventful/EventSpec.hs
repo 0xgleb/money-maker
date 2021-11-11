@@ -18,12 +18,12 @@ module MoneyMaker.Eventful.EventSpec
   )
   where
 
-import MoneyMaker.Error
 import MoneyMaker.Eventful.Event
 import MoneyMaker.Eventful.Command
 
+import MoneyMaker.Based
+
 import qualified Data.Aeson as Aeson
-import           Protolude
 import           Test.Hspec
 
 spec :: Spec

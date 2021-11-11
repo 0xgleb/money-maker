@@ -6,11 +6,9 @@ module MoneyMaker.Eventful.EventStore.Helpers
   where
 
 import MoneyMaker.Eventful.EventSpec
-
-import MoneyMaker.Error
 import MoneyMaker.Eventful
 
-import Protolude
+import MoneyMaker.Based
 
 type TestEventStoreProcedureErrors
   = [ UserEventError
@@ -20,7 +18,7 @@ type TestEventStoreProcedureErrors
     ]
 
 userAggregateId :: Id "user"
-userAggregateId = Id @"user" [uuid|123e4666-e89b-12d3-a456-666614174000|]
+userAggregateId = Id @"user" [uuidQuasiQuoter|123e4666-e89b-12d3-a456-666614174000|]
 
 testEventStoreProcedure
   :: forall errors m
