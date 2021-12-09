@@ -19,6 +19,7 @@ data Environment
       , user         :: ByteString
       , password     :: ByteString
       , cbAPIKey     :: ByteString
+      , cbAPISecret  :: ByteString
       , cbPassphrase :: ByteString
       , mode         :: Mode
       }
@@ -37,35 +38,41 @@ getEnvironment = do
   maybePassword <- Env.lookupEnv "POSTGRES_PASSWORD"
 
   maybeCBAPIKey <- Env.lookupEnv "CB_ACCESS_KEY"
+  maybeCBAPISecret <- Env.lookupEnv "CB_ACCESS_SECRET"
   maybeCBPassphrase <- Env.lookupEnv "CB_ACCESS_PASSPHRASE"
 
   ( BS.pack -> dbName
     , BS.pack -> user
     , BS.pack -> password
     , BS.pack -> cbAPIKey
+    , BS.pack -> cbAPISecret
     , BS.pack -> cbPassphrase
     ) <-
-    case (maybeDbName, maybeUser, maybePassword, maybeCBAPIKey, maybeCBPassphrase) of
-      (Just db, Just user, Just password, Just apiKey, Just passphrase) ->
-        pure (db, user, password, apiKey, passphrase)
+    case (maybeDbName, maybeUser, maybePassword, maybeCBAPIKey, maybeCBAPISecret, maybeCBPassphrase) of
+      (Just db, Just user, Just password, Just apiKey, Just apiSecret, Just passphrase) ->
+        pure (db, user, password, apiKey, apiSecret, passphrase)
 
-      (Nothing, _, _, _, _) -> do
+      (Nothing, _, _, _, _, _) -> do
         putStrLn @Text "POSTGRES_DB environment variable is missing"
         Exit.exitFailure
 
-      (_, Nothing, _, _, _) -> do
+      (_, Nothing, _, _, _, _) -> do
         putStrLn @Text "POSTGRES_USER environment variable is missing"
         Exit.exitFailure
 
-      (_, _, Nothing, _, _) -> do
+      (_, _, Nothing, _, _, _) -> do
         putStrLn @Text "POSTGRES_PASSWORD environment variable is missing"
         Exit.exitFailure
 
-      (_, _, _, Nothing, _) -> do
+      (_, _, _, Nothing, _, _) -> do
         putStrLn @Text "CB_ACCESS_KEY environment variable is missing"
         Exit.exitFailure
 
-      (_, _, _, _, Nothing) -> do
+      (_, _, _, _, Nothing, _) -> do
+        putStrLn @Text "CB_ACCESS_SECRET environment variable is missing"
+        Exit.exitFailure
+
+      (_, _, _, _, _, Nothing) -> do
         putStrLn @Text "CB_ACCESS_PASSPHRASE environment variable is missing"
         Exit.exitFailure
 

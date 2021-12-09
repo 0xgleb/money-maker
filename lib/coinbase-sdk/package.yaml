@@ -8,6 +8,8 @@ dependencies:
 - QuickCheck
 - aeson
 - bytestring
+- base64-bytestring
+- cryptohash-sha256
 - generic-arbitrary
 - http-client
 - http-client-tls
@@ -17,6 +19,7 @@ dependencies:
 - stm
 - text
 - time
+- timestamp
 - vector
 - websockets
 
